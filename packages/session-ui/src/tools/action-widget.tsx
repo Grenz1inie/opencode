@@ -9,6 +9,7 @@ const resource = {
     widgetBody: {
       definition: "tile/widget",
       children: [
+        { definition: "tile/text", attributes: { text: "Flights on {!$attrs.dateOfTravel}", variant: "h2" } },
         {
           definition: "tile/column",
           meta: { forEach: "{!$attrs.flights}", forItem: "$flight" },
@@ -25,6 +26,14 @@ const resource = {
               ],
             },
           ],
+        },
+        {
+          definition: "tile/button",
+          id: FlightAction.changeDate.node,
+          attributes: {
+            label: "Change date",
+            actions: { click: [{ definition: FlightAction.changeDate.definition, attributes: { content: "Change the travel date" } }] },
+          },
         },
       ],
     },
@@ -85,15 +94,22 @@ export function renderActionWidget(widget: string | undefined, outputs: Schema.J
   }
 }
 
-export function ActionWidget(props: { tree: Widget.Rendered; label: string }) {
+export type WidgetActions = {
+  widget: string
+  disabled?: boolean
+  buttonLabel?: string
+  run: (operation: Widget.Operation | undefined) => void
+}
+
+export function ActionWidget(props: { tree: Widget.Rendered; label: string; actions?: WidgetActions }) {
   return (
     <section aria-label={props.label} class="flight-widget">
-      <WidgetElement node={props.tree} />
+      <WidgetElement node={props.tree} actions={props.actions} />
     </section>
   )
 }
 
-function WidgetElement(props: { node: Widget.Rendered }) {
+function WidgetElement(props: { node: Widget.Rendered; actions?: WidgetActions }) {
   const attributes = () => props.node.attributes
 
   const gap = () => {
@@ -102,7 +118,7 @@ function WidgetElement(props: { node: Widget.Rendered }) {
     return value === "sm" || value === "md" || value === "lg" ? value : undefined
   }
 
-  const children = () => <For each={props.node.children}>{(node) => <WidgetElement node={node} />}</For>
+  const children = () => <For each={props.node.children}>{(node) => <WidgetElement node={node} actions={props.actions} />}</For>
 
   return (
     <Switch>
@@ -128,6 +144,18 @@ function WidgetElement(props: { node: Widget.Rendered }) {
       </Match>
       <Match when={props.node.definition === "tile/separator"}>
         <hr class="action-widget-separator" />
+      </Match>
+      <Match when={props.node.definition === "tile/button" && props.actions}>
+        {(actions) => (
+          <button
+            type="button"
+            class="action-widget-button"
+            disabled={actions().disabled}
+            onClick={() => actions().run(Widget.operation(actions().widget, props.node))}
+          >
+            {actions().buttonLabel ?? String(attributes()?.label ?? "")}
+          </button>
+        )}
       </Match>
       <Match when={props.node.definition === "tile/text" && attributes()?.variant === "h2"}>
         <h2 class="action-widget-heading">{props.node.text}</h2>

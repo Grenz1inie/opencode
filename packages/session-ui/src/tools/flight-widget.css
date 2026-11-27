@@ -48,6 +48,27 @@
 .flight-widget-row[data-justify="between"] { justify-content: space-between; }
 .flight-widget-row[data-gap] > :last-child { margin-inline-start: 0; font-weight: inherit; }
 
+.action-widget-button {
+  justify-self: start;
+  padding: 6px 12px;
+  border: 1px solid var(--v2-border-border-base, ButtonBorder);
+  border-radius: 6px;
+  background: var(--v2-surface-surface-raised, ButtonFace);
+  color: var(--v2-text-text-base, ButtonText);
+  font: inherit;
+  cursor: pointer;
+}
+
+.action-widget-button:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus, Highlight);
+  outline-offset: 2px;
+}
+
+.action-widget-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .action-widget-heading { margin: 0; font-size: 1.25em; font-weight: 600; }
 .flight-widget [data-muted] { color: var(--text-weak, GrayText); }
 .flight-widget [data-caption] { font-size: 0.875em; }

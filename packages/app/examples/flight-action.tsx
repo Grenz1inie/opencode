@@ -14,7 +14,9 @@ function Demo() {
   })
 
   function search(input: unknown) {
-    setView(FlightAction.run(input).user)
+    const result = FlightAction.run(input)
+    console.debug("Flight search target invoked", result.tool.content)
+    setView(result.user)
     setPending(undefined)
     setStatus("")
   }
@@ -50,7 +52,12 @@ function Demo() {
       >
         {(request) => (
           <form
-            aria-label="Flight search details"
+            aria-label={view() ? "Change flight date" : "Flight search details"}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return
+              setPending(undefined)
+              setStatus("")
+            }}
             onSubmit={(event) => {
               event.preventDefault()
               const next = { ...request().values, ...Object.fromEntries(new FormData(event.currentTarget)) }
@@ -66,7 +73,14 @@ function Demo() {
               {(field) => (
                 <label>
                   {field.title}
-                  <input name={field.key} type={field.format === "date" ? "date" : "text"} pattern={field.pattern} required />
+                  <input
+                    name={field.key}
+                    type={field.format === "date" ? "date" : "text"}
+                    pattern={field.pattern}
+                    value={field.default}
+                    required
+                    ref={field.format === "date" ? (input) => queueMicrotask(() => input.focus()) : undefined}
+                  />
                 </label>
               )}
             </For>
@@ -76,7 +90,28 @@ function Demo() {
         )}
       </Show>
       <div role="status">{status()}</div>
-      <Show when={view()}>{(result) => <FlightWidget view={result()} label="Flight results" />}</Show>
+      <Show when={view()}>
+        {(result) => (
+          <FlightWidget
+            view={result()}
+            label="Flight results"
+            actions={{
+              widget: FlightAction.widget,
+              disabled: !!pending(),
+              run: (operation) => {
+                const request = FlightAction.reschedule(result(), operation)
+                if (!request) {
+                  setStatus("This action is unavailable.")
+                  return
+                }
+
+                setStatus("")
+                setPending(request)
+              },
+            }}
+          />
+        )}
+      </Show>
     </>
   )
 }
