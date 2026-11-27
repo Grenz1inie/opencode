@@ -1,5 +1,7 @@
 export * as FlightAction from "./flight-action.js"
 
+export { CustomerReviews } from "./customer-reviews.js"
+export { Widget } from "./widget.js"
 export { ActionOutput } from "./action-output.js"
 
 import { Schema, SchemaIssue } from "effect"

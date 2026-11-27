@@ -1,0 +1,2 @@
+# Preserve the bytes of the upstream resources documented in source.json.
+* -text whitespace=-blank-at-eol

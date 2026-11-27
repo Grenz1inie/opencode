@@ -1,0 +1,68 @@
+[
+  {
+    "path": "pronto/LICENSE.md",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "LICENSE.md",
+    "git_blob": "fd9e39224d802e455a36e5b3b726a67cbc4c85eb",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/LICENSE.md",
+    "license": "Apache-2.0",
+    "bytes": 24139,
+    "sha256": "2176b0c4ee79328fb7d9c65f9a9d8a5e37154e67f4365df85dc2643da398cab5"
+  },
+  {
+    "path": "pronto/lightningTypes/customerReviewsOutput/renderer.json",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/lightningTypes/customerReviewsOutput/renderer.json",
+    "git_blob": "75487175c3c9e570e77ee8532345e44ca2042d3f",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/lightningTypes/customerReviewsOutput/renderer.json",
+    "license": "Apache-2.0",
+    "bytes": 305,
+    "sha256": "7044d084864de5b4ed9e280540370a30719e5b37a8b46ec32bccb4ba2dacb81a"
+  },
+  {
+    "path": "pronto/lightningTypes/customerReviewsOutput/schema.json",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/lightningTypes/customerReviewsOutput/schema.json",
+    "git_blob": "7ce111e5926c8858d89e8a3c55a263587457d6df",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/lightningTypes/customerReviewsOutput/schema.json",
+    "license": "Apache-2.0",
+    "bytes": 236,
+    "sha256": "56225575711f09145f27220bda571ae507482860e3bd0c9bcb5f38ee58b0a76d"
+  },
+  {
+    "path": "pronto/uiWidgets/customerReviews/customerReviews.json",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/uiWidgets/customerReviews/customerReviews.json",
+    "git_blob": "18d438866178a89342bd7ee31a83c9c3c621fa70",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/uiWidgets/customerReviews/customerReviews.json",
+    "license": "Apache-2.0",
+    "bytes": 2775,
+    "sha256": "2d655fae5b21d5f79efb754a0f234bba52c02abb4d045a712500a11398bad958"
+  },
+  {
+    "path": "pronto/uiWidgets/customerReviews/customerReviews.uiwidget-meta.xml",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/uiWidgets/customerReviews/customerReviews.uiwidget-meta.xml",
+    "git_blob": "ff13ebb94c2aff6d5eac7569f56f9787622c6711",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/uiWidgets/customerReviews/customerReviews.uiwidget-meta.xml",
+    "license": "Apache-2.0",
+    "bytes": 333,
+    "sha256": "f75f904fa6833d4cd43348b0f6e5e584a82c89b9f6a6fdfabe3f72194f52e9a3"
+  },
+  {
+    "path": "pronto/uiWidgets/customerReviews/schema.json",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/uiWidgets/customerReviews/schema.json",
+    "git_blob": "9e1fd8f3eab6bbf1afc454dee556b48c57ad1386",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/uiWidgets/customerReviews/schema.json",
+    "license": "Apache-2.0",
+    "bytes": 973,
+    "sha256": "9cf250362fa4aa476eef80c7f80ebd7dca702068ed4767415b074447af4ffadb"
+  }
+]
