@@ -131,11 +131,11 @@ export const changeDate = {
   definition: "action/sendMessage",
 } as const satisfies Widget.Operation
 
-export function reschedule(view: View, operation: Widget.Operation | undefined): InputRequest | undefined {
+export function reschedule(view: View, operation: Widget.Operation | undefined) {
   if (!operation || operation.widget !== view.definition || operation.widget !== changeDate.widget) return
   if (operation.node !== changeDate.node || operation.definition !== changeDate.definition) return
   const { originCity, destinationCity, dateOfTravel } = view.attributes
-  return { values: { originCity, destinationCity }, fields: [{ ...dateField, default: dateOfTravel }] }
+  return { values: { originCity, destinationCity }, fields: [{ ...dateField, default: dateOfTravel }] as const }
 }
 
 export function simulate(input: Input): Results {
