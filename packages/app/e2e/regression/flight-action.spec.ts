@@ -13,8 +13,8 @@ test("renders flight cards from the tool's user projection at 390 pixels", async
   const result = FlightAction.run(trip)
   await timeline.send(
     partUpdated(toolPart(id, name, "completed", trip, {
-      output: "model-only marker",
-      metadata: { flightAction: result.user ?? null },
+      output: result.tool.content,
+      metadata: result.tool.metadata,
     })),
   )
   const group = page.getByRole("region", { name: "Flight results" })

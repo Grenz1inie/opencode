@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { Option, Predicate, Schema } from "effect"
+import { isActionResult } from "../tools/action-result-state"
 import type { ToolProps } from "../tools/tool-renderer"
 
 const decodeInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.JsonObject))
@@ -19,6 +20,8 @@ export function currentToolMetadata(tool: SessionMessageAssistantTool) {
 }
 
 export function currentToolOutput(tool: SessionMessageAssistantTool) {
+  if (isActionResult(tool.name, currentToolMetadata(tool))) return undefined
+
   if (tool.state.status === "running") {
     const output = tool.state.metadata.output
 
@@ -36,6 +39,8 @@ export function currentToolOutput(tool: SessionMessageAssistantTool) {
  * screenshot, a generated image. A read of an image previews it from its path in its own row instead.
  */
 export function currentToolImages(tool: SessionMessageAssistantTool) {
+  if (isActionResult(tool.name, currentToolMetadata(tool))) return []
+
   if (!("content" in tool.state) || !tool.state.content) return []
 
   if (tool.name === "read" && readImagePath(currentToolInput(tool))) return []
@@ -47,7 +52,7 @@ export function currentToolImages(tool: SessionMessageAssistantTool) {
 }
 
 export function currentToolError(tool: SessionMessageAssistantTool) {
-  if (tool.state.status !== "error") return undefined
+  if (tool.state.status !== "error" || isActionResult(tool.name, currentToolMetadata(tool))) return undefined
 
   return tool.state.error.message
 }
