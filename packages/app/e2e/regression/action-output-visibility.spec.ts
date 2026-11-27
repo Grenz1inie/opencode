@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { ActionOutput, FlightAction } from "@opencode/flight-action"
+import { ActionOutput, CustomerReviews, FlightAction } from "@opencode/flight-action"
 import { assistantMessage, setupTimeline, toolPart, userMessage } from "../utils/timeline"
 
 test("limits Action details, invalid Widget fallback, and replay to the user projection", async ({ page }) => {
@@ -61,4 +61,49 @@ test("limits Action details, invalid Widget fallback, and replay to the user pro
   await healthy.getByText("Output details", { exact: true }).click()
   await expect(healthy.locator("pre")).toContainText("USER_4B")
   await assertHidden()
+})
+
+test("renders original Pronto reviews and shows diagnostics for invalid direct outputs", async ({ page }) => {
+  const reviews = CustomerReviews.sample(false)
+  const invalid = (outputs: Parameters<typeof ActionOutput.result>[0]["user"]) =>
+    ActionOutput.result({ user: outputs, model: {} }, CustomerReviews.widget)
+  const part = (key: string, output: ReturnType<typeof CustomerReviews.run>) =>
+    toolPart("prt_reviews_" + key, CustomerReviews.name, "completed", {}, {
+      output: output.content,
+      metadata: output.metadata,
+    })
+  await setupTimeline(page, {
+    viewport: { width: 390, height: 844 },
+    messages: [
+      userMessage(),
+      assistantMessage([
+        part("sample", CustomerReviews.run({})),
+        part("empty", CustomerReviews.run({ empty: true })),
+        part("missing", invalid({ reviews: { reviewCount: reviews.reviewCount, averageRating: reviews.averageRating } })),
+        part("wrong_type", invalid({ reviews: { ...reviews, items: [{ ...reviews.items[0], rating: "5" }] } })),
+      ]),
+    ],
+  })
+
+  const output = (key: string) => page.locator(`[data-timeline-part-id="prt_reviews_${key}"]`)
+  const sample = output("sample").getByRole("region", { name: "Customer reviews" })
+  await expect(sample.getByRole("heading", { name: "Customer Reviews", exact: true })).toBeVisible()
+  await expect(sample).toContainText("Average: 4.5/5 (2 reviews)")
+  const rows = sample.getByRole("article")
+  await expect(rows).toHaveCount(2)
+  for (const [index, item] of reviews.items.entries()) {
+    const row = rows.nth(index)
+    await expect(row.getByRole("heading", { name: item.customerName })).toBeVisible()
+    await expect(row.getByRole("img", { name: "Rating" })).toBeVisible()
+    for (const text of [item.orderDate, `${item.rating}/5`, item.comments]) {
+      await expect(row.getByText(text, { exact: true })).toBeVisible()
+    }
+  }
+
+  const empty = output("empty").getByRole("region", { name: "Customer reviews" })
+  await expect(empty.getByRole("heading", { name: "Customer Reviews", exact: true })).toBeVisible()
+  await expect(empty).toContainText("Average: 0/5 (0 reviews)")
+  await expect(empty.getByRole("article")).toHaveCount(0)
+  await expect(output("missing")).toContainText(CustomerReviews.widget + " · $.outputs.reviews.items")
+  await expect(output("wrong_type")).toContainText(CustomerReviews.widget + " · $.outputs.reviews.items.0.rating")
 })
