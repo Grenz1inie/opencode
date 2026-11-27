@@ -2,6 +2,7 @@ import { ActionOutput, FlightAction } from "@opencode/flight-action"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Option, Schema } from "effect"
 import { createMemo, Match, Show, Switch } from "solid-js"
+import { ActionWidget, renderActionWidget } from "./action-widget"
 import { FlightWidget } from "./flight-widget"
 import type { ToolProps } from "./tool-renderer"
 
@@ -19,26 +20,20 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
       : undefined,
   )
 
-  const binding = createMemo(() => {
+  const widget = createMemo(() => {
     const item = result()
 
-    if (!item) return
-
-    if (
-      item.widget === FlightAction.widget ||
-      (props.tool === FlightAction.definition.name && Object.hasOwn(item.outputs, "results"))
-    )
-      return FlightAction.bind(item.outputs)
+    return item ? renderActionWidget(item.widget, item.outputs, props.tool) : undefined
   })
 
-  const view = () => (result()?.widget === FlightAction.widget ? binding()?.view : legacy())
+  const widgetLabel = () => widget()?.label
 
   const output = createMemo(() => {
     const value = result()?.outputs
 
     if (!value) return
 
-    const rejected = binding()?.rejectedOutput
+    const rejected = widget()?.rejectedOutput
     const visible = Object.entries(value).filter(([name]) => name !== rejected)
 
     return visible.length ? JSON.stringify(Object.fromEntries(visible), null, 2) : undefined
@@ -47,13 +42,7 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
   const diagnostic = () => {
     if (Object.hasOwn(props.metadata, "actionOutput") && !result()) return "$.metadata.actionOutput"
 
-    const widget = result()?.widget
-
-    if (widget && widget !== FlightAction.widget) return "$.widget"
-
-    const path = binding()?.path
-
-    if (path) return `${FlightAction.widget} · ${path}`
+    return widget()?.diagnostic
   }
 
   return (
@@ -66,9 +55,14 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
           <span role="status">{i18n.t("ui.actionOutput.failed")}</span>
         </Match>
         <Match when={true}>
-          <Show when={view()} fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>
-            {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} />}
-          </Show>
+          <Switch fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>
+            <Match when={widget()?.tree}>
+              {(tree) => <ActionWidget tree={tree()} label={i18n.t(widgetLabel() ?? "ui.actionOutput.completed")} />}
+            </Match>
+            <Match when={legacy()}>
+              {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} />}
+            </Match>
+          </Switch>
           <Show
             when={diagnostic()}
             fallback={

@@ -1,7 +1,7 @@
 export * as FlightActionTool from "./flight-action.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
-import { FlightAction } from "@opencode/flight-action"
+import { CustomerReviews, FlightAction } from "@opencode/flight-action"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Tool } from "@opencode/schema/tool"
@@ -49,6 +49,22 @@ export const Plugin = {
                 catch: (error) => new ToolFailure({ message: "Invalid flight search result", error }),
               })
               return result.tool
+            }),
+        })
+        editor.add({
+          name: CustomerReviews.name,
+          options: { codemode: false },
+          description: "Show sample customer reviews. Set empty to true if the user asks for an empty review list.",
+          input: CustomerReviews.Input,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              yield* permission.assert({
+                action: CustomerReviews.name,
+                resources: ["*"],
+                save: ["*"],
+                ...Permission.invocation(context),
+              }).pipe(Effect.mapError((error) => new ToolFailure({ message: "Permission denied: get_customer_reviews", error })))
+              return CustomerReviews.run(input)
             }),
         })
       })

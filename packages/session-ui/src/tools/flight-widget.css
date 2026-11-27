@@ -34,3 +34,23 @@
   margin-inline-start: auto;
   font-weight: 600;
 }
+
+.action-widget-column {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.flight-widget [data-gap="sm"] { gap: 4px; }
+.flight-widget [data-gap="md"] { gap: 8px; }
+.flight-widget [data-gap="lg"] { gap: 16px; }
+.flight-widget-row[data-align="center"] { align-items: center; }
+.flight-widget-row[data-justify="between"] { justify-content: space-between; }
+.flight-widget-row[data-gap] > :last-child { margin-inline-start: 0; font-weight: inherit; }
+
+.action-widget-heading { margin: 0; font-size: 1.25em; font-weight: 600; }
+.flight-widget [data-muted] { color: var(--text-weak, GrayText); }
+.flight-widget [data-caption] { font-size: 0.875em; }
+.flight-widget [data-semibold] { font-weight: 600; }
+.action-widget-star { color: var(--icon-warning-base, #a56200); }
+.action-widget-separator { width: 100%; margin: 0; border: 0; border-block-start: 1px solid var(--border-base, #ccd3e0); }

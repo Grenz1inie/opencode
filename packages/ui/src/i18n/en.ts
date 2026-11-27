@@ -130,6 +130,7 @@ const source = {
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
   "ui.flightAction.results": "Flight results",
+  "ui.customerReviews.results": "Customer reviews",
   "ui.actionOutput.pending": "Action in progress…",
   "ui.actionOutput.completed": "Action completed",
   "ui.actionOutput.failed": "Action failed or was cancelled",
