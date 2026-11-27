@@ -11,9 +11,9 @@ const date = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)).check(
 )
 
 export const Input = Schema.Struct({
-  originCity: city,
-  destinationCity: city,
-  dateOfTravel: date,
+  originCity: city.annotate({ description: "The origin city provided by the user." }),
+  destinationCity: city.annotate({ description: "The destination city provided by the user." }),
+  dateOfTravel: date.annotate({ description: "The travel date specified by the user, YYYY-MM-DD. Omit if unknown." }),
 })
 type Input = typeof Input.Type
 
@@ -39,6 +39,44 @@ export const definition = {
     results: { complex_data_type_name: "c__flightResults", is_displayable: true, filter_from_agent: false },
   },
 } as const
+
+type InputKey = keyof Input
+type InputPolicy = Partial<Record<InputKey, { is_required?: boolean; is_user_input?: boolean }>>
+const inputKeys = ["originCity", "destinationCity", "dateOfTravel"] as const
+const labels = { originCity: "Origin city", destinationCity: "Destination city", dateOfTravel: "Departure date" }
+const Draft = Schema.Struct({
+  originCity: Schema.optionalKey(Schema.Unknown),
+  destinationCity: Schema.optionalKey(Schema.Unknown),
+  dateOfTravel: Schema.optionalKey(Schema.Unknown),
+})
+
+export function formable(key: string, policy: InputPolicy = definition.inputs) {
+  return inputKeys.some((field) => field === key && policy[field]?.is_user_input === true)
+}
+
+export function prepare(input: unknown, policy: InputPolicy = definition.inputs) {
+  const draft = Schema.decodeUnknownSync(Draft)(input)
+  const values: Partial<Record<InputKey, string>> = {}
+  const fields = inputKeys.flatMap((key) => {
+    const value = Schema.decodeUnknownOption(Input.fields[key])(draft[key])
+    if (value._tag === "Some") {
+      values[key] = value.value
+      return []
+    }
+    if (policy[key]?.is_required !== true) return []
+    if (!formable(key, policy)) throw new Error(`Missing or invalid input: ${labels[key]}`)
+    return [{
+      key,
+      title: labels[key],
+      type: "string" as const,
+      required: true,
+      ...(definition.inputs[key].lightningType === "lightning__dateType"
+        ? { format: "date" as const, placeholder: "YYYY-MM-DD" }
+        : { pattern: "\\S" }),
+    }]
+  })
+  return { values, fields }
+}
 
 export const renderer = {
   renderer: {

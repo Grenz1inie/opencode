@@ -143,7 +143,7 @@ export function SessionElicitationDock(props: {
                       <>
                         <Label field={text()} />
                         <TextInput
-                          type={inputType(text().format)}
+                          type={props.request.metadata?.kind === "action" && text().format === "date" ? "date" : inputType(text().format)}
                           value={dock.draft().text[text().key] ?? ""}
                           placeholder={text().placeholder}
                           disabled={dock.busy()}

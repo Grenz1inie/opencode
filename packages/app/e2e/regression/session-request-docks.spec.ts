@@ -551,6 +551,36 @@ test("shows an auto-accepted permission in the dock once its replies stop answer
   expect(attempts.count).toBe(3)
 })
 
+test("shows only the missing date in the flight Action dock", async ({ page }) => {
+  const form = {
+    id: "frm_flight_date",
+    sessionID,
+    title: "Flight search details",
+    metadata: { kind: "action", message: "杭州 → 成都" },
+    fields: [{ key: "dateOfTravel", type: "string", format: "date", title: "Departure date", required: true }],
+  }
+  const replies: unknown[] = []
+  await mockWorkspace(page, {
+    name: "RequestDocks",
+    directory,
+    sessions: [{ id: sessionID, title }],
+    forms: () => (replies.length > 0 ? [] : [form]),
+    onFormReply: (reply) => replies.push(reply.body),
+    seed: { tabs: [sessionID] },
+  })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+  const dock = page.locator('[data-component="session-elicitation-dock"]')
+  await expect(dock).toContainText("杭州 → 成都")
+  await expect(dock.locator("input")).toHaveCount(1)
+  const date = dock.getByLabel("Departure date")
+  await expect(date).toHaveAttribute("type", "date")
+  await date.fill("2026-12-05")
+  await date.press("Control+Enter")
+  await expect(dock).toHaveCount(0)
+  expect(replies).toEqual([{ answer: { dateOfTravel: "2026-12-05" } }])
+})
+
 test("keeps a typed MCP elicitation answer across a session switch and submits it once", async ({ page }) => {
   const other = { id: "ses_request_docks_other", title: "Other request session" }
 

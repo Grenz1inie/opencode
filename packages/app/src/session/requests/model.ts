@@ -131,7 +131,7 @@ export function createSessionRequestModel() {
     if (websearch.request() || questionRequest()) return
     const form = formRequest()
 
-    if (form?.metadata?.kind === "mcp-elicitation") return form
+    if (form?.metadata?.kind === "mcp-elicitation" || form?.metadata?.kind === "action") return form
 
     const ref = location()
 
