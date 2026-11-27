@@ -9,7 +9,7 @@ const resource = {
     widgetBody: {
       definition: "tile/widget",
       children: [
-        { definition: "tile/text", attributes: { text: "Flights on {!$attrs.dateOfTravel}", variant: "h2" } },
+        { definition: "tile/text", attributes: { text: "{!$attrs.dateOfTravel}", variant: "h2" } },
         {
           definition: "tile/column",
           meta: { forEach: "{!$attrs.flights}", forItem: "$flight" },

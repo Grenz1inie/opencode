@@ -16,6 +16,7 @@ export function SessionPermissionDock(props: {
   onDecide: (response: "once" | "always" | "reject") => void
 }) {
   const language = useLanguage()
+  const reschedule = () => props.request.metadata?.operation === "reschedule"
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.action}.description`
@@ -37,6 +38,13 @@ export function SessionPermissionDock(props: {
   return (
     <DockPrompt
       kind="permission"
+      onKeyDown={(event) => {
+        if (!reschedule() || props.responding || event.key !== "Escape") return
+
+        event.preventDefault()
+        event.stopPropagation()
+        props.onDecide("reject")
+      }}
       header={
         <div data-slot="permission-row" data-variant="header">
           <span data-slot="permission-icon">
@@ -49,7 +57,15 @@ export function SessionPermissionDock(props: {
         <>
           <div />
           <div data-slot="permission-footer-actions">
-            <Button variant="ghost" size="normal" onClick={() => props.onDecide("reject")} disabled={props.responding}>
+            <Button
+              variant="ghost"
+              size="normal"
+              ref={(button: HTMLButtonElement) => {
+                if (reschedule()) queueMicrotask(() => button.focus({ preventScroll: true }))
+              }}
+              onClick={() => props.onDecide("reject")}
+              disabled={props.responding}
+            >
               {language.t("ui.permission.deny")}
             </Button>
             <Button

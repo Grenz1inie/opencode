@@ -1,4 +1,6 @@
-import { DataProvider, type ToolFileSource, type TurnDiffInput } from "@opencode/session-ui/context"
+import { DataProvider, type FlightRescheduleHost, type ToolFileSource, type TurnDiffInput } from "@opencode/session-ui/context"
+import { FlightReschedule } from "@opencode/schema/flight-reschedule"
+import { Option, Schema } from "effect"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type ParentProps } from "solid-js"
@@ -30,6 +32,8 @@ import {
   type SessionReferenceLookupEffect,
   type SessionReferenceLookupEvent,
 } from "./session-reference-lookup-machine"
+
+const decodeFlightChange = Schema.decodeUnknownOption(FlightReschedule.Changed)
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -240,6 +244,26 @@ export function SessionUIProvider(
     }
   })
 
+  const flightReschedule: FlightRescheduleHost = {
+    get: (card, signal) =>
+      serverSDK.api.rpc(FlightReschedule.Definition).get(card, {
+        location: data.session.get(card.sessionID)?.location ?? { directory: directory() },
+        signal,
+      }),
+    change: (input, signal) =>
+      serverSDK.api.rpc(FlightReschedule.Definition).change(input, {
+        location: data.session.get(input.card.sessionID)?.location ?? { directory: directory() },
+        signal,
+      }),
+    listen: (receive) =>
+      serverSDK.event.listen((event) => {
+        if (event.type !== "rpc.opencode.flight-reschedule.changed") return
+        const changed = Option.getOrUndefined(decodeFlightChange(event.data))
+
+        if (changed) receive(changed)
+      }),
+  }
+
   const sessionUIData = createMemo(() => ({
     provider: providers.ready()
       ? { all: providers.all(), default: providers.default(), connected: providers.connected().map((item) => item.id) }
@@ -270,6 +294,7 @@ export function SessionUIProvider(
         peekMedia={(uri, mime) => serverSDK.media.peek(uri, mime)}
         toolFile={toolFile}
         turnDiff={turnDiff()}
+        flightReschedule={flightReschedule}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
       >

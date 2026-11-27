@@ -64,6 +64,8 @@ export function AssistantContent(props: {
         {(tool) => (
           <ToolDisplay
             id={props.contentID}
+            messageID={props.message.id}
+            callID={tool().id}
             tool={toolRule(tool()).name}
             input={currentToolInput(tool())}
             metadata={currentToolMetadata(tool())}

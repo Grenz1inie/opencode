@@ -2,7 +2,9 @@ import { ActionOutput, FlightAction } from "@opencode/flight-action"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Option, Schema } from "effect"
 import { createMemo, Match, Show, Switch } from "solid-js"
-import { ActionWidget, renderActionWidget } from "./action-widget"
+import { useData } from "../context"
+import { ActionWidget, renderActionWidget, type WidgetActions } from "./action-widget"
+import { createFlightChange } from "./flight-change"
 import { FlightWidget } from "./flight-widget"
 import type { ToolProps } from "./tool-renderer"
 
@@ -10,15 +12,54 @@ const presentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
 
 const legacyView = Schema.decodeUnknownOption(FlightAction.View)
 
-export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadata">) {
+export function ActionResult(
+  props: Pick<ToolProps, "tool" | "status" | "metadata" | "sessionID" | "messageID" | "callID">,
+) {
   const i18n = useI18n()
-  const result = createMemo(() => Option.getOrUndefined(presentation(props.metadata.actionOutput)))
+  const data = useData()
+  const initial = createMemo(() => Option.getOrUndefined(presentation(props.metadata.actionOutput)))
 
   const legacy = createMemo(() =>
     props.tool === FlightAction.definition.name && !Object.hasOwn(props.metadata, "actionOutput")
       ? Option.getOrUndefined(legacyView(props.metadata.flightAction))
       : undefined,
   )
+
+  const card = createMemo(() => {
+    const host = data.flightReschedule
+    const sessionID = props.sessionID ?? data.sessionID
+    const current = initial()
+
+    if (
+      !host || !data.flag("flight_action") || !sessionID || !props.messageID || !props.callID ||
+      props.tool !== FlightAction.definition.name || props.status !== "completed"
+    ) return
+
+    const view = current?.widget === FlightAction.widget ? FlightAction.bind(current.outputs).view : legacy()
+
+    if (view) return { host, card: { sessionID, messageID: props.messageID, callID: props.callID }, view }
+  })
+
+  const change = createFlightChange(card, () => i18n.t("ui.flightAction.unavailable"))
+
+  const result = createMemo(() => {
+    const revised = change.view().result
+
+    return revised ? { widget: FlightAction.widget, outputs: revised.outputs } : initial()
+  })
+
+  const actions = createMemo<WidgetActions | undefined>(() => {
+    const state = change.view()
+
+    if (!card() || !state.available) return
+
+    return {
+      widget: FlightAction.widget,
+      disabled: state.busy,
+      buttonLabel: i18n.t("ui.flightAction.changeDate"),
+      run: change.run,
+    }
+  })
 
   const widget = createMemo(() => {
     const item = result()
@@ -57,12 +98,15 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
         <Match when={true}>
           <Switch fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>
             <Match when={widget()?.tree}>
-              {(tree) => <ActionWidget tree={tree()} label={i18n.t(widgetLabel() ?? "ui.actionOutput.completed")} />}
+              {(tree) => <ActionWidget tree={tree()} label={i18n.t(widgetLabel() ?? "ui.actionOutput.completed")} actions={actions()} />}
             </Match>
             <Match when={legacy()}>
-              {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} />}
+              {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} actions={actions()} />}
             </Match>
           </Switch>
+          <Show when={change.view().error}>
+            {(message) => <p role="alert">{message()}</p>}
+          </Show>
           <Show
             when={diagnostic()}
             fallback={

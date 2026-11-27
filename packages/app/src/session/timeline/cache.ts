@@ -130,6 +130,7 @@ export function createTimelineCache(
                 readMedia: data.readMedia,
                 peekMedia: data.peekMedia,
                 toolFile: data.toolFile,
+                flightReschedule: data.flightReschedule,
                 shellRunning: data.shellRunning,
                 // A hidden running shell stops polling its output and resumes from its cursor once selected.
                 get shellOutput() {

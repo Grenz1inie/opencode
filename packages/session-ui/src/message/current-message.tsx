@@ -119,6 +119,8 @@ export function SessionAssistantContent(props: {
         {(tool) => (
           <ToolDisplay
             id={props.contentID}
+            messageID={props.message.id}
+            callID={tool().id}
             tool={tool().name}
             input={currentToolInput(tool())}
             metadata={currentToolMetadata(tool())}

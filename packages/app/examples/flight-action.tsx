@@ -7,13 +7,14 @@ function Demo() {
   const [view, setView] = createSignal<FlightAction.View>()
   const [status, setStatus] = createSignal("")
   const [pending, setPending] = createSignal<ReturnType<typeof FlightAction.prepare>>()
+
   const [draft, setDraft] = createSignal({
     originCity: "杭州",
     destinationCity: "成都",
     dateOfTravel: "2026-12-05",
   })
 
-  function search(input: unknown) {
+  function search(input: ReturnType<typeof FlightAction.prepare>["values"]) {
     const result = FlightAction.run(input)
     console.debug("Flight search target invoked", result.tool.content)
     setView(result.user)
@@ -31,14 +32,17 @@ function Demo() {
             onSubmit={(event) => {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
+
               const next = {
                 originCity: String(data.get("originCity") ?? ""),
                 destinationCity: String(data.get("destinationCity") ?? ""),
                 dateOfTravel: String(data.get("dateOfTravel") ?? ""),
               }
+
               setDraft(next)
               setView(undefined)
               const prepared = FlightAction.prepare(next)
+
               if (prepared.fields.length === 0) search(prepared.values)
               else setPending(prepared)
             }}
@@ -61,11 +65,15 @@ function Demo() {
             onSubmit={(event) => {
               event.preventDefault()
               const next = { ...request().values, ...Object.fromEntries(new FormData(event.currentTarget)) }
-              if (FlightAction.prepare(next).fields.length > 0) {
+              const prepared = FlightAction.prepare(next)
+
+              if (prepared.fields.length > 0) {
                 setStatus("Enter all required flight details.")
+
                 return
               }
-              search(next)
+
+              search(prepared.values)
             }}
           >
             <p>{[request().values.originCity, request().values.destinationCity].filter(Boolean).join(" → ")}</p>
@@ -100,8 +108,10 @@ function Demo() {
               disabled: !!pending(),
               run: (operation) => {
                 const request = FlightAction.reschedule(result(), operation)
+
                 if (!request) {
                   setStatus("This action is unavailable.")
+
                   return
                 }
 
@@ -117,4 +127,5 @@ function Demo() {
 }
 
 const root = document.getElementById("flight-search")
+
 if (root) render(() => <Demo />, root)
