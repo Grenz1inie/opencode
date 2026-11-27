@@ -101,6 +101,7 @@ import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
 import { CodeModeAgentsPlugin } from "../tool/plugin/codemode-agents.js"
 import { CodeModeAgents } from "../codemode/agents.js"
+import { FlightActionTool } from "../tool/plugin/flight-action.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -250,6 +251,7 @@ const pre = [
   SubagentTool.Plugin,
   CodeModeAgentsPlugin.Plugin,
   TodoTool.Plugin,
+  FlightActionTool.Plugin,
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
   WriteTool.Plugin,

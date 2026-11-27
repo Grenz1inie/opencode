@@ -1,0 +1,36 @@
+.flight-widget {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.flight-widget-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-base, #ccd3e0);
+  border-radius: 10px;
+  background: var(--surface-base, Canvas);
+  padding: 12px;
+}
+
+.flight-widget-card h4 {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.flight-widget-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-widget-row > :last-child {
+  margin-inline-start: auto;
+  font-weight: 600;
+}
