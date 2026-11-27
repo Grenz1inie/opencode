@@ -151,6 +151,7 @@ export function readBinding(expression: string, scope: Readonly<Record<string, u
   const path = /^\{!([$\w]+(?:\.\w+)+)\}$/.exec(expression)?.[1]
   return path?.split(".").reduce<unknown>((value, key) => {
     if (!value || typeof value !== "object" || !Object.hasOwn(value, key)) return undefined
-    return Reflect.get(value, key)
+    // SAFETY: the JSON binding reads one checked own property, including reactive store properties.
+    return (value as Readonly<Record<string, unknown>>)[key]
   }, scope)
 }
