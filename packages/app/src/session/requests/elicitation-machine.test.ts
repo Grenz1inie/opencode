@@ -54,11 +54,13 @@ function last(events: ElicitationDockEvent[], from?: ElicitationDockState) {
 describe("transitionElicitationDock", () => {
   test("keeps a rejected answer editable and clears only the corrected field error", () => {
     const message = "Expected date for form field: dateOfTravel"
+
     const rejected = last([
       { type: "text.set", key: "name", value: "成都" },
       { type: "send", action: { type: "reply", answer: { name: "成都", dateOfTravel: "2026-02-30" } } },
       { type: "request.failed", attempt: 1, field: "dateOfTravel", error: message },
     ])
+
     expect(selectElicitationFieldError(rejected.state, "dateOfTravel")).toBe(message)
     expect(selectElicitationFieldError(rejected.state, "name")).toBeUndefined()
     expect(rejected.effects).toEqual([{ type: "timeout.clear" }])

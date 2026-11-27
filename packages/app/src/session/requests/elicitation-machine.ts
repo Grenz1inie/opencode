@@ -190,6 +190,7 @@ export function transitionElicitationDock(
   if (draft === state.draft) return unchanged(state)
 
   if (state.fieldError?.key === event.key) return changed({ status: "answering", attempt: state.attempt, draft })
+
   return changed({ ...state, draft })
 }
 

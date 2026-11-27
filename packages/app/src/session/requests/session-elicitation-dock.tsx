@@ -143,6 +143,7 @@ export function SessionElicitationDock(props: {
                   <Match when={field.type === "string" && field}>
                     {(text) => {
                       const error = () => dock.fieldError(text().key)
+
                       return (
                         <>
                           <Label field={text()} />

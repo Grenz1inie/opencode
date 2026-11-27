@@ -135,9 +135,11 @@ export function createSessionRequestModel() {
     if (form?.metadata?.kind === "mcp-elicitation") return form
 
     const ref = location()
+
     const locationForm = ref && data.session.form.list("global", ref)?.find(
       (item) => item.metadata?.kind === "mcp-elicitation",
     )
+
     return locationForm ?? sessionActionFormRequest(data.session.list(), data.session.form.list, params.id)
   })
 

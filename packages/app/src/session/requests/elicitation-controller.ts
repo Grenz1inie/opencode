@@ -91,6 +91,7 @@ export function createElicitationDock(input: {
         (error) => {
           const message = error instanceof Error ? error.message : String(error)
           // The form API identifies the field at the end of its validation message.
+
           const field =
             action.type === "reply" &&
             request.metadata?.kind === "action" &&
@@ -100,6 +101,7 @@ export function createElicitationDock(input: {
                   (field) => field.type === "string" && message.endsWith(`: ${field.key}`),
                 )?.key
               : undefined
+
           dispatch({ type: "request.failed", attempt, error: message, field })
         },
       )

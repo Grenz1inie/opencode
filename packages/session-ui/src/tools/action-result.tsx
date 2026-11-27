@@ -6,41 +6,53 @@ import { FlightWidget } from "./flight-widget"
 import type { ToolProps } from "./tool-renderer"
 
 const presentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
+
 const legacyView = Schema.decodeUnknownOption(FlightAction.View)
 
 export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadata">) {
   const i18n = useI18n()
   const result = createMemo(() => Option.getOrUndefined(presentation(props.metadata.actionOutput)))
+
   const legacy = createMemo(() =>
     props.tool === FlightAction.definition.name && !Object.hasOwn(props.metadata, "actionOutput")
       ? Option.getOrUndefined(legacyView(props.metadata.flightAction))
       : undefined,
   )
+
   const binding = createMemo(() => {
     const item = result()
+
     if (!item) return
+
     if (
       item.widget === FlightAction.widget ||
       (props.tool === FlightAction.definition.name && Object.hasOwn(item.outputs, "results"))
     )
       return FlightAction.bind(item.outputs)
   })
+
   const view = () => (result()?.widget === FlightAction.widget ? binding()?.view : legacy())
+
   const output = createMemo(() => {
     const value = result()?.outputs
+
     if (!value) return
 
     const rejected = binding()?.rejectedOutput
     const visible = Object.entries(value).filter(([name]) => name !== rejected)
+
     return visible.length ? JSON.stringify(Object.fromEntries(visible), null, 2) : undefined
   })
+
   const diagnostic = () => {
     if (Object.hasOwn(props.metadata, "actionOutput") && !result()) return "$.metadata.actionOutput"
 
     const widget = result()?.widget
+
     if (widget && widget !== FlightAction.widget) return "$.widget"
 
     const path = binding()?.path
+
     if (path) return `${FlightAction.widget} · ${path}`
   }
 

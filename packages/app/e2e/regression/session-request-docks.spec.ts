@@ -559,6 +559,7 @@ test("shows only the missing date in the flight Action dock", async ({ page }) =
     metadata: { kind: "action", message: "杭州 → 成都" },
     fields: [{ key: "dateOfTravel", type: "string", format: "date", title: "Departure date", required: true }],
   }
+
   const replies: unknown[] = []
   await mockWorkspace(page, {
     name: "RequestDocks",
@@ -594,11 +595,13 @@ test("shows a rejected Action answer beside its field and preserves a valid city
       { key: "dateOfTravel", type: "string", format: "date", title: "Departure date", required: true },
     ],
   }
+
   const replies: unknown[] = []
   await mockServer(page, {
     forms: () => (replies.length > 1 ? [] : [form]),
     onFormReply: (reply) => {
       replies.push(reply.body)
+
       return replies.length === 1 ? "Missing required form field: dateOfTravel" : undefined
     },
   })
@@ -633,6 +636,7 @@ test("handles a Location elicitation before an Action and then dismisses the Act
     metadata: { kind: "action", message: "杭州 → 成都" },
     fields: [{ key: "dateOfTravel", type: "string", format: "date", title: "Departure date", required: true }],
   }
+
   const mcp = {
     id: "frm_existing_location",
     sessionID: "global",
@@ -640,6 +644,7 @@ test("handles a Location elicitation before an Action and then dismisses the Act
     metadata: { kind: "mcp-elicitation", server: "release" },
     fields: [{ key: "env", type: "string", title: "Environment" }],
   }
+
   const replies: string[] = []
   const cancellations: { sessionID: string; formID: string }[] = []
   await mockServer(page, {

@@ -86,11 +86,13 @@ describe("sessionPermissionRequest", () => {
 test("leaves existing session forms selectable when an Action is also pending", () => {
   const action: FormInfo = { ...question("flight", "root"), metadata: { kind: "action" } }
   const mcp: FormInfo = { ...question("mcp", "root"), metadata: { kind: "mcp-elicitation", server: "release" } }
+
   for (const legacy of [question("q", "root"), search("search", "root"), mcp]) {
     const forms = { root: [action, legacy] }
     expect(sessionFormRequest(tree, forms, "root")).toBe(legacy)
     expect(sessionActionFormRequest(tree, (id) => (id === "root" ? forms.root : undefined), "root")).toBe(action)
   }
+
   expect(sessionFormRequest(tree, { root: [action] }, "root")).toBeUndefined()
 })
 
