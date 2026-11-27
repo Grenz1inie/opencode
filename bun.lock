@@ -59,6 +59,7 @@
         "@dnd-kit/solid": "0.5.0",
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
+        "@opencode/flight-action": "workspace:*",
         "@opencode/gui-plugins": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
