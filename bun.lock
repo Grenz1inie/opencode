@@ -414,6 +414,18 @@
         "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
       },
     },
+    "packages/flight-action": {
+      "name": "@opencode/flight-action",
+      "version": "2.4.1",
+      "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/gui-plugins": {
       "name": "@opencode/gui-plugins",
       "version": "2.4.1",
@@ -1865,6 +1877,8 @@
     "@opencode/desktop": ["@opencode/desktop@workspace:packages/desktop"],
 
     "@opencode/files": ["@opencode/files@workspace:services/files"],
+
+    "@opencode/flight-action": ["@opencode/flight-action@workspace:packages/flight-action"],
 
     "@opencode/gui-plugins": ["@opencode/gui-plugins@workspace:packages/gui-plugins"],
 
