@@ -1,5 +1,7 @@
 import { CustomerReviews, FlightAction } from "@opencode/flight-action"
 
-export function isActionResult(tool: string, metadata: object) {
+import type { ToolProps } from "./tool-renderer"
+
+export function isActionResult(tool: string, metadata: ToolProps["metadata"]) {
   return tool === FlightAction.definition.name || tool === CustomerReviews.name || Object.hasOwn(metadata, "actionOutput")
 }

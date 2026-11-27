@@ -53,7 +53,10 @@ export function bind(outputs: Schema.JsonObject) {
   const decoded = decodeOutput(outputs.reviews)
   if (decoded._tag === "Failure") {
     const path = format(decoded.failure.issue).issues[0]?.path
-    return { path: "$.outputs.reviews" + (path?.length ? "." + path.map(String).join(".") : "") }
+    return {
+      rejectedOutput: "reviews",
+      path: "$.outputs.reviews" + (path?.length ? "." + path.map(String).join(".") : ""),
+    }
   }
   try {
     const attributes = Object.fromEntries(

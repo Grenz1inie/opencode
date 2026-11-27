@@ -7,18 +7,22 @@ import { FlightWidget } from "./flight-widget"
 import type { ToolProps } from "./tool-renderer"
 
 const presentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
+
 const legacyView = Schema.decodeUnknownOption(FlightAction.View)
 
 export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadata">) {
   const i18n = useI18n()
   const result = createMemo(() => Option.getOrUndefined(presentation(props.metadata.actionOutput)))
+
   const legacy = createMemo(() =>
     props.tool === FlightAction.definition.name && !Object.hasOwn(props.metadata, "actionOutput")
       ? Option.getOrUndefined(legacyView(props.metadata.flightAction))
       : undefined,
   )
+
   const widget = createMemo(() => {
     const item = result()
+
     return item ? renderActionWidget(item.widget, item.outputs, props.tool) : undefined
   })
 
@@ -34,6 +38,7 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
 
     return visible.length ? JSON.stringify(Object.fromEntries(visible), null, 2) : undefined
   })
+
   const diagnostic = () => {
     if (Object.hasOwn(props.metadata, "actionOutput") && !result()) return "$.metadata.actionOutput"
 

@@ -40,7 +40,9 @@ test("registers the original review shapes and diagnoses invalid output bindings
   const view = CustomerReviews.bind({ reviews })
   expect(view.path).toBeUndefined()
   expect(view.view?.attributes.items).toEqual(reviews.items)
-  expect(CustomerReviews.bind({ reviews: { ...reviews, items: [{ ...reviews.items[0], rating: "5" }] } }).path)
-    .toBe("$.outputs.reviews.items.0.rating")
+  expect(CustomerReviews.bind({ reviews: { ...reviews, items: [{ ...reviews.items[0], rating: "5" }] } })).toEqual({
+    rejectedOutput: "reviews",
+    path: "$.outputs.reviews.items.0.rating",
+  })
   expect(CustomerReviews.bind({ reviews: { averageRating: 4.5, items: [] } }).path).toBe("$.outputs.reviews.reviewCount")
 })

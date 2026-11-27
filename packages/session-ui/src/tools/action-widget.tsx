@@ -30,6 +30,7 @@ const resource = {
     },
   },
 } satisfies { type: "lightning__agentforceWidget"; contentBody: { widgetBody: Widget.Node } }
+
 export const flightWidgetResource = resource.contentBody.widgetBody
 
 type Registration = {
@@ -38,7 +39,7 @@ type Registration = {
   output: string
   resource: Widget.Node
   label: "ui.flightAction.results" | "ui.customerReviews.results"
-  bind: (outputs: Schema.JsonObject) => ActionOutput.Binding<{ attributes: Readonly<Record<string, unknown>> }>
+  bind: (outputs: Schema.JsonObject) => ActionOutput.Binding<{ attributes: Schema.JsonObject }>
 }
 
 const registry: readonly Registration[] = [
@@ -94,11 +95,15 @@ export function ActionWidget(props: { tree: Widget.Rendered; label: string }) {
 
 function WidgetElement(props: { node: Widget.Rendered }) {
   const attributes = () => props.node.attributes
+
   const gap = () => {
     const value = attributes()?.gap
+
     return value === "sm" || value === "md" || value === "lg" ? value : undefined
   }
+
   const children = () => <For each={props.node.children}>{(node) => <WidgetElement node={node} />}</For>
+
   return (
     <Switch>
       <Match when={props.node.definition === "tile/widget"}>{children()}</Match>

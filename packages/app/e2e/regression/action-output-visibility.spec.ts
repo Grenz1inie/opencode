@@ -87,13 +87,16 @@ test("limits Action details, invalid Widget fallback, and replay to the user pro
 
 test("renders original Pronto reviews and shows diagnostics for invalid direct outputs", async ({ page }) => {
   const reviews = CustomerReviews.sample(false)
+
   const invalid = (outputs: Parameters<typeof ActionOutput.result>[0]["user"]) =>
     ActionOutput.result({ user: outputs, model: {} }, CustomerReviews.widget)
+
   const part = (key: string, output: ReturnType<typeof CustomerReviews.run>) =>
     toolPart("prt_reviews_" + key, CustomerReviews.name, "completed", {}, {
       output: output.content,
       metadata: output.metadata,
     })
+
   await setupTimeline(page, {
     viewport: { width: 390, height: 844 },
     messages: [
@@ -102,7 +105,13 @@ test("renders original Pronto reviews and shows diagnostics for invalid direct o
         part("sample", CustomerReviews.run({})),
         part("empty", CustomerReviews.run({ empty: true })),
         part("missing", invalid({ reviews: { reviewCount: reviews.reviewCount, averageRating: reviews.averageRating } })),
-        part("wrong_type", invalid({ reviews: { ...reviews, items: [{ ...reviews.items[0], rating: "5" }] } })),
+        part(
+          "wrong_type",
+          invalid({
+            reviews: { ...reviews, items: [{ ...reviews.items[0], rating: "REJECTED_RATING" }] },
+            notice: "VALID_REVIEW_NOTICE",
+          }),
+        ),
       ]),
     ],
   })
@@ -113,10 +122,12 @@ test("renders original Pronto reviews and shows diagnostics for invalid direct o
   await expect(sample).toContainText("Average: 4.5/5 (2 reviews)")
   const rows = sample.getByRole("article")
   await expect(rows).toHaveCount(2)
+
   for (const [index, item] of reviews.items.entries()) {
     const row = rows.nth(index)
     await expect(row.getByRole("heading", { name: item.customerName })).toBeVisible()
     await expect(row.getByRole("img", { name: "Rating" })).toBeVisible()
+
     for (const text of [item.orderDate, `${item.rating}/5`, item.comments]) {
       await expect(row.getByText(text, { exact: true })).toBeVisible()
     }
@@ -127,5 +138,10 @@ test("renders original Pronto reviews and shows diagnostics for invalid direct o
   await expect(empty).toContainText("Average: 0/5 (0 reviews)")
   await expect(empty.getByRole("article")).toHaveCount(0)
   await expect(output("missing")).toContainText(CustomerReviews.widget + " · $.outputs.reviews.items")
-  await expect(output("wrong_type")).toContainText(CustomerReviews.widget + " · $.outputs.reviews.items.0.rating")
+  await expect(output("missing").locator("pre")).toHaveCount(0)
+
+  const badRating = output("wrong_type")
+  await expect(badRating).toContainText(CustomerReviews.widget + " · $.outputs.reviews.items.0.rating")
+  await expect(badRating.locator("pre")).toContainText("VALID_REVIEW_NOTICE")
+  await expect(badRating).not.toContainText("REJECTED_RATING")
 })

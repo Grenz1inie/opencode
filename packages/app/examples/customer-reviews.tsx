@@ -5,8 +5,10 @@ import { render } from "solid-js/web"
 
 function Demo() {
   const [empty, setEmpty] = createSignal(false)
+
   const result = createMemo(() => {
     const output = CustomerReviews.run({ empty: empty() }).metadata.actionOutput
+
     return renderActionWidget(CustomerReviews.widget, output.outputs)
   })
 
@@ -25,4 +27,5 @@ function Demo() {
 }
 
 const root = document.getElementById("pronto-reviews")
+
 if (root) render(() => <Demo />, root)
