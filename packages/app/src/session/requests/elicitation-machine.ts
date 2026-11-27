@@ -15,8 +15,15 @@ export type ElicitationDraft = {
 
 export type ElicitationAction = { readonly type: "reply"; readonly answer: FormAnswer } | { readonly type: "cancel" }
 
+type FieldError = { readonly key: string; readonly message: string }
+
 export type ElicitationDockState =
-  | { readonly status: "answering"; readonly attempt: number; readonly draft: ElicitationDraft }
+  | {
+      readonly status: "answering"
+      readonly attempt: number
+      readonly draft: ElicitationDraft
+      readonly fieldError?: FieldError
+    }
   | {
       readonly status: "sending"
       readonly attempt: number
@@ -34,7 +41,7 @@ export type ElicitationDockEvent =
   | { readonly type: "list.toggle"; readonly key: string; readonly value: string; readonly checked: boolean }
   | { readonly type: "send"; readonly action: ElicitationAction }
   | { readonly type: "request.succeeded"; readonly attempt: number }
-  | { readonly type: "request.failed"; readonly attempt: number; readonly error?: string }
+  | { readonly type: "request.failed"; readonly attempt: number; readonly error?: string; readonly field?: string }
   | { readonly type: "request.timed-out"; readonly attempt: number }
   // `form.replied` or `form.cancelled` arrived for this form.
   | { readonly type: "resolved" }
@@ -121,6 +128,18 @@ export function transitionElicitationDock(
   if (event.type === "request.failed" || event.type === "request.timed-out") {
     if (state.status !== "sending" || state.attempt !== event.attempt) return unchanged(state)
 
+    if (event.type === "request.failed" && event.field && event.error) {
+      return changed(
+        {
+          status: "answering",
+          attempt: state.attempt,
+          draft: state.draft,
+          fieldError: { key: event.field, message: event.error },
+        },
+        [{ type: "timeout.clear" }],
+      )
+    }
+
     return changed({ status: "answering", attempt: state.attempt, draft: state.draft }, [
       { type: "timeout.clear" },
       { type: "toast.fail", error: event.type === "request.failed" ? event.error : undefined },
@@ -170,7 +189,9 @@ export function transitionElicitationDock(
 
   if (draft === state.draft) return unchanged(state)
 
-  return changed({ status: "answering", attempt: state.attempt, draft })
+  if (state.fieldError?.key === event.key) return changed({ status: "answering", attempt: state.attempt, draft })
+
+  return changed({ ...state, draft })
 }
 
 function nextDraft(
@@ -237,6 +258,10 @@ function transitionDisposed(
 /** True while a reply or dismissal is in flight, after it settles, and after the dock went away. */
 export function isElicitationBusy(state: ElicitationDockState) {
   return state.status !== "answering"
+}
+
+export function selectElicitationFieldError(state: ElicitationDockState, key: string) {
+  if (state.status === "answering" && state.fieldError?.key === key) return state.fieldError.message
 }
 
 export function selectElicitationDraft(state: ElicitationDockState) {

@@ -559,13 +559,16 @@ test("shows only the missing date in the flight Action dock", async ({ page }) =
     metadata: { kind: "action", message: "杭州 → 成都" },
     fields: [{ key: "dateOfTravel", type: "string", format: "date", title: "Departure date", required: true }],
   }
+
   const replies: unknown[] = []
   await mockWorkspace(page, {
     name: "RequestDocks",
     directory,
     sessions: [{ id: sessionID, title }],
     forms: () => (replies.length > 0 ? [] : [form]),
-    onFormReply: (reply) => replies.push(reply.body),
+    onFormReply: (reply) => {
+      replies.push(reply.body)
+    },
     seed: { tabs: [sessionID] },
   })
   await page.goto(sessionHref(sessionID))
@@ -579,6 +582,97 @@ test("shows only the missing date in the flight Action dock", async ({ page }) =
   await date.press("Control+Enter")
   await expect(dock).toHaveCount(0)
   expect(replies).toEqual([{ answer: { dateOfTravel: "2026-12-05" } }])
+})
+
+test("shows a rejected Action answer beside its field and preserves a valid city", async ({ page }) => {
+  const form = {
+    id: "frm_flight_repair",
+    sessionID,
+    title: "Flight search details",
+    metadata: { kind: "action", message: "杭州" },
+    fields: [
+      { key: "destinationCity", type: "string", title: "Destination city", required: true },
+      { key: "dateOfTravel", type: "string", format: "date", title: "Departure date", required: true },
+    ],
+  }
+
+  const replies: unknown[] = []
+  await mockServer(page, {
+    forms: () => (replies.length > 1 ? [] : [form]),
+    onFormReply: (reply) => {
+      replies.push(reply.body)
+
+      return replies.length === 1 ? "Missing required form field: dateOfTravel" : undefined
+    },
+  })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const dock = page.locator('[data-component="session-elicitation-dock"]')
+  const city = dock.getByLabel("Destination city")
+  const date = dock.getByLabel("Departure date")
+  await city.fill("成都")
+  await date.press("Control+Enter")
+  await expect(date).toHaveAttribute("aria-invalid", "true")
+  await expect(date).toHaveAccessibleDescription("Missing required form field: dateOfTravel")
+  await expect(city).toHaveValue("成都")
+  await expect(city).not.toHaveAttribute("aria-invalid", "true")
+
+  await date.fill("2026-12-05")
+  await expect(date).not.toHaveAttribute("aria-invalid", "true")
+  await date.press("Control+Enter")
+  await expect(dock).toHaveCount(0)
+  expect(replies).toEqual([
+    { answer: { destinationCity: "成都" } },
+    { answer: { destinationCity: "成都", dateOfTravel: "2026-12-05" } },
+  ])
+})
+
+test("handles a Location elicitation before an Action and then dismisses the Action with Escape", async ({ page }) => {
+  const action = {
+    id: "frm_flight_waiting",
+    sessionID,
+    title: "Flight search details",
+    metadata: { kind: "action", message: "杭州 → 成都" },
+    fields: [{ key: "dateOfTravel", type: "string", format: "date", title: "Departure date", required: true }],
+  }
+
+  const mcp = {
+    id: "frm_existing_location",
+    sessionID: "global",
+    title: "Deploy",
+    metadata: { kind: "mcp-elicitation", server: "release" },
+    fields: [{ key: "env", type: "string", title: "Environment" }],
+  }
+
+  const replies: string[] = []
+  const cancellations: { sessionID: string; formID: string }[] = []
+  await mockServer(page, {
+    forms: () => (cancellations.length ? [] : replies.length ? [action] : [action, mcp]),
+    onFormReply: (reply) => {
+      replies.push(reply.sessionID)
+    },
+    onFormCancel: (request) => {
+      cancellations.push(request)
+    },
+  })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const dock = page.locator('[data-component="session-elicitation-dock"]')
+  const environment = dock.getByLabel("Environment")
+  const date = dock.getByLabel("Departure date")
+  await expect(environment).toBeVisible()
+  await expect(date).toHaveCount(0)
+  await environment.fill("staging")
+  await environment.press("Control+Enter")
+  await expect(date).toBeVisible()
+  expect(replies).toEqual(["global"])
+
+  await date.press("Escape")
+  await expect(dock).toHaveCount(0)
+  expect(cancellations).toEqual([{ sessionID, formID: action.id }])
+  expect(replies).toEqual(["global"])
 })
 
 test("keeps a typed MCP elicitation answer across a session switch and submits it once", async ({ page }) => {
@@ -598,7 +692,9 @@ test("keeps a typed MCP elicitation answer across a session switch and submits i
     directory,
     sessions: [{ id: sessionID, title }, other],
     forms: () => (replies.length > 0 ? [] : [form]),
-    onFormReply: (reply) => replies.push(reply.body),
+    onFormReply: (reply) => {
+      replies.push(reply.body)
+    },
     seed: { tabs: [sessionID, other.id] },
   })
 

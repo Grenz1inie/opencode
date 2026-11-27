@@ -19,13 +19,20 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
   )
   const widget = createMemo(() => {
     const item = result()
-    return item?.widget ? renderActionWidget(item.widget, item.outputs) : undefined
+    return item ? renderActionWidget(item.widget, item.outputs, props.tool) : undefined
   })
+
   const widgetLabel = () => widget()?.label
+
   const output = createMemo(() => {
     const value = result()?.outputs
 
-    return value && Object.keys(value).length ? JSON.stringify(value, null, 2) : undefined
+    if (!value) return
+
+    const rejected = widget()?.rejectedOutput
+    const visible = Object.entries(value).filter(([name]) => name !== rejected)
+
+    return visible.length ? JSON.stringify(Object.fromEntries(visible), null, 2) : undefined
   })
   const diagnostic = () => {
     if (Object.hasOwn(props.metadata, "actionOutput") && !result()) return "$.metadata.actionOutput"

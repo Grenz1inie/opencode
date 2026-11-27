@@ -5,6 +5,7 @@ import {
   createElicitationDockState,
   isElicitationBusy,
   selectElicitationDraft,
+  selectElicitationFieldError,
   transitionElicitationDock,
   type ElicitationDockEvent,
   type ElicitationDockState,
@@ -51,6 +52,26 @@ function last(events: ElicitationDockEvent[], from?: ElicitationDockState) {
 }
 
 describe("transitionElicitationDock", () => {
+  test("keeps a rejected answer editable and clears only the corrected field error", () => {
+    const message = "Expected date for form field: dateOfTravel"
+
+    const rejected = last([
+      { type: "text.set", key: "name", value: "成都" },
+      { type: "send", action: { type: "reply", answer: { name: "成都", dateOfTravel: "2026-02-30" } } },
+      { type: "request.failed", attempt: 1, field: "dateOfTravel", error: message },
+    ])
+
+    expect(selectElicitationFieldError(rejected.state, "dateOfTravel")).toBe(message)
+    expect(selectElicitationFieldError(rejected.state, "name")).toBeUndefined()
+    expect(rejected.effects).toEqual([{ type: "timeout.clear" }])
+    expect(selectElicitationDraft(rejected.state).text.name).toBe("成都")
+
+    const edited = transitionElicitationDock(rejected.state, { type: "text.set", key: "name", value: "杭州" })
+    expect(selectElicitationFieldError(edited.state, "dateOfTravel")).toBe(message)
+    const fixed = transitionElicitationDock(edited.state, { type: "text.set", key: "dateOfTravel", value: "2026-12-05" })
+    expect(selectElicitationFieldError(fixed.state, "dateOfTravel")).toBeUndefined()
+  })
+
   // Two mutations used to run side by side, and the dock re-enabled as soon as the reply resolved.
   test("one send claims the dock, a second one is ignored and it stays busy after the reply lands", () => {
     const sending = last([{ type: "send", action: reply }])

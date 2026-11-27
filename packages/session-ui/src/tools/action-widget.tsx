@@ -1,4 +1,4 @@
-import { CustomerReviews, FlightAction, Widget } from "@opencode/flight-action"
+import { ActionOutput, CustomerReviews, FlightAction, Widget } from "@opencode/flight-action"
 import type { Schema } from "effect"
 import { For, Match, Switch } from "solid-js"
 import "./flight-widget.css"
@@ -33,28 +33,53 @@ const resource = {
 export const flightWidgetResource = resource.contentBody.widgetBody
 
 type Registration = {
+  widget: string
+  tool: string
+  output: string
   resource: Widget.Node
   label: "ui.flightAction.results" | "ui.customerReviews.results"
-  bind: (outputs: Schema.JsonObject) => {
-    view?: { attributes: Readonly<Record<string, unknown>> }
-    path?: string
-  }
+  bind: (outputs: Schema.JsonObject) => ActionOutput.Binding<{ attributes: Readonly<Record<string, unknown>> }>
 }
 
-const registry = new Map<string, Registration>([
-  [FlightAction.widget, { resource: flightWidgetResource, label: "ui.flightAction.results", bind: FlightAction.bind }],
-  [CustomerReviews.widget, { resource: CustomerReviews.resource, label: "ui.customerReviews.results", bind: CustomerReviews.bind }],
-])
+const registry: readonly Registration[] = [
+  {
+    widget: FlightAction.widget,
+    tool: FlightAction.definition.name,
+    output: "results",
+    resource: flightWidgetResource,
+    label: "ui.flightAction.results",
+    bind: FlightAction.bind,
+  },
+  {
+    widget: CustomerReviews.widget,
+    tool: CustomerReviews.name,
+    output: "reviews",
+    resource: CustomerReviews.resource,
+    label: "ui.customerReviews.results",
+    bind: CustomerReviews.bind,
+  },
+]
 
-export function renderActionWidget(widget: string, outputs: Schema.JsonObject) {
-  const entry = registry.get(widget)
-  if (!entry) return { diagnostic: "$.widget" }
-  const result = entry.bind(outputs)
-  if (!result.view) return { diagnostic: `${widget} · ${result.path ?? "$.outputs"}` }
+export function renderActionWidget(widget: string | undefined, outputs: Schema.JsonObject, tool?: string) {
+  const entry = registry.find((registration) => registration.widget === widget)
+  const known = registry.find((registration) => registration.tool === tool && Object.hasOwn(outputs, registration.output))
+  const source = known ?? entry
+  const result = source?.bind(outputs)
+  const rejectedOutput = result?.rejectedOutput
+
+  if (widget && (!entry || source !== entry)) return { diagnostic: "$.widget", rejectedOutput }
+
+  if (!source || !result) return {}
+
+  if (!result.view) return { diagnostic: `${source.widget} · ${result.path ?? "$.outputs"}`, rejectedOutput }
+
+  if (!entry) return {}
+
   try {
-    return { tree: Widget.render(widget, entry.resource, result.view.attributes), label: entry.label }
+    return { tree: Widget.render(entry.widget, entry.resource, result.view.attributes), label: entry.label }
   } catch (error) {
     if (!(error instanceof Widget.BindingError)) throw error
+
     return { diagnostic: error.message }
   }
 }

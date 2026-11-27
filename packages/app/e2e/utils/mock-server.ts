@@ -11,6 +11,7 @@ import { SERVER } from "./app"
 import {
   MockApi,
   MockBadRequest,
+  MockFormInvalidAnswer,
   MockInternal,
   MockNotFound,
   MockPtyFeatureUnsupported,
@@ -114,7 +115,9 @@ export interface MockServerConfig {
   onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
   // Records form replies. The mock keeps listing a replied form unless `forms` stops returning it.
-  onFormReply?: (input: { sessionID: string; formID: string; body: unknown }) => void
+  // Returning a message rejects the form answer with the same typed error as the server.
+  onFormReply?: (input: { sessionID: string; formID: string; body: unknown }) => void | string
+  onFormCancel?: (input: { sessionID: string; formID: string }) => void
   // Web search providers (`GET /api/websearch/provider`), none by default.
   websearchProviders?: Resolvable<unknown[]>
   // MCP servers. A list serves every workspace; a function receives the requested directory.
@@ -1361,8 +1364,13 @@ function mockHandlers(
         sessionFormReply: (ctx) =>
           Effect.sync(() =>
             config.onFormReply?.({ sessionID: ctx.params.sessionID, formID: ctx.params.formID, body: ctx.payload }),
-          ).pipe(Effect.andThen(noContent)),
-        sessionFormCancel: () => noContent,
+          ).pipe(
+            Effect.flatMap((message) =>
+              message ? Effect.fail(new MockFormInvalidAnswer({ id: ctx.params.formID, message })) : noContent,
+            ),
+          ),
+        sessionFormCancel: (ctx) =>
+          Effect.sync(() => config.onFormCancel?.(ctx.params)).pipe(Effect.andThen(noContent)),
         sessionBackground: (ctx) =>
           Effect.sync(() => config.onBackground?.({ sessionID: ctx.params.sessionID })).pipe(Effect.andThen(noContent)),
         sessionInbox: (ctx) =>
