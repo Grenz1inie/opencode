@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch as Branch } from "solid-js"
+import { createUniqueId, For, Match, Show, Switch as Branch } from "solid-js"
 import { Option, Schema } from "effect"
 import type { FormInfo, FormStringField, LocationRef } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
@@ -40,6 +40,8 @@ export function SessionElicitationDock(props: {
   })
 
   const message = () => Option.getOrUndefined(decodeMessage(props.request.metadata?.message))
+  const action = () => props.request.metadata?.kind === "action"
+  const errorID = createUniqueId()
 
   return (
     <div data-component="session-elicitation-dock">
@@ -139,19 +141,33 @@ export function SessionElicitationDock(props: {
                     )}
                   </Match>
                   <Match when={field.type === "string" && field}>
-                    {(text) => (
-                      <>
-                        <Label field={text()} />
-                        <TextInput
-                          type={props.request.metadata?.kind === "action" && text().format === "date" ? "date" : inputType(text().format)}
-                          value={dock.draft().text[text().key] ?? ""}
-                          placeholder={text().placeholder}
-                          disabled={dock.busy()}
-                          aria-label={text().title ?? text().key}
-                          onInput={(event) => dock.setText(text().key, event.currentTarget.value)}
-                        />
-                      </>
-                    )}
+                    {(text) => {
+                      const error = () => dock.fieldError(text().key)
+
+                      return (
+                        <>
+                          <Label field={text()} />
+                          <TextInput
+                            type={action() && text().format === "date" ? "date" : inputType(text().format)}
+                            value={dock.draft().text[text().key] ?? ""}
+                            placeholder={text().placeholder}
+                            disabled={dock.busy()}
+                            invalid={!!error()}
+                            aria-required={action() ? text().required : undefined}
+                            aria-label={text().title ?? text().key}
+                            aria-describedby={error() ? errorID : undefined}
+                            onInput={(event) => dock.setText(text().key, event.currentTarget.value)}
+                          />
+                          <Show when={error()}>
+                            {(description) => (
+                              <span id={errorID} data-slot="elicitation-error" role="alert">
+                                {description()}
+                              </span>
+                            )}
+                          </Show>
+                        </>
+                      )
+                    }}
                   </Match>
                   <Match when={field.type === "multiselect" && field}>
                     {(multi) => (

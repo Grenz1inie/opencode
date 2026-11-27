@@ -58,7 +58,12 @@ type Listed = { forms: unknown[] }
 test("sends one consent reply for a double-click and keeps the answered form closed", async ({ page }) => {
   const replies: Reply[] = []
   // The mock keeps listing the consent form after the reply, so the form sync that follows it lists the answered form.
-  await mockServer(page, { forms: [consent], onFormReply: (reply) => replies.push(reply) })
+  await mockServer(page, {
+    forms: [consent],
+    onFormReply: (reply) => {
+      replies.push(reply)
+    },
+  })
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 

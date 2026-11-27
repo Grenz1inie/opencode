@@ -5,7 +5,9 @@ export { ActionOutput } from "./action-output.js"
 import { Schema, SchemaIssue } from "effect"
 import { ActionOutput } from "./action-output.js"
 
-const city = Schema.String.check(Schema.isPattern(/\S/))
+// The same pattern runs with implicit whole-value matching in HTML inputs.
+const nonblank = /^\s*\S.*/
+const city = Schema.String.check(Schema.isPattern(nonblank))
 const date = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)).check(
   Schema.makeFilter((value) => {
     const day = new Date(`${value}T00:00:00.000Z`)
@@ -75,7 +77,7 @@ export function prepare(input: unknown, policy: InputPolicy = definition.inputs)
       required: true,
       ...(definition.inputs[key].lightningType === "lightning__dateType"
         ? { format: "date" as const, placeholder: "YYYY-MM-DD" }
-        : { pattern: "\\S" }),
+        : { pattern: nonblank.source }),
     }]
   })
   return { values, fields }
@@ -133,13 +135,24 @@ export function run(input: unknown, target: (input: Input) => unknown = targets[
   }
 }
 
+const decodeResults = Schema.decodeUnknownResult(Results)
 const decodeView = Schema.decodeUnknownResult(View)
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
-export function bind(outputs: Schema.JsonObject): { view?: View; path?: string } {
+export function bind(outputs: Schema.JsonObject): ActionOutput.Binding<View> {
   if (!Object.hasOwn(outputs, "results")) return { path: "$.outputs.results" }
+
+  const results = decodeResults(outputs.results)
+  if (results._tag === "Failure") {
+    const path = formatIssues(results.failure.issue).issues[0]?.path
+    return {
+      rejectedOutput: "results",
+      path: "$.outputs.results" + (path?.length ? "." + path.map(String).join(".") : ""),
+    }
+  }
+
   const attributes = Object.fromEntries(
-    Object.entries(override.attributes).map(([name, expression]) => [name, readBinding(expression, { $attrs: outputs.results })]),
+    Object.entries(override.attributes).map(([name, expression]) => [name, readBinding(expression, { $attrs: results.success })]),
   )
   const decoded = decodeView({ definition: widget, attributes })
   if (decoded._tag === "Success") return { view: decoded.success }

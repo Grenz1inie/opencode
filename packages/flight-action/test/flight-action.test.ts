@@ -26,8 +26,12 @@ test("uses a text field for missing cities and respects collection policy defaul
     title: "Origin city",
     type: "string",
     required: true,
-    pattern: "\\S",
+    pattern: "^\\s*\\S.*",
   }])
+  const city = FlightAction.prepare({ ...trip, originCity: "" }).fields.find((field) => "pattern" in field)
+  const pattern = new RegExp(`^(?:${city?.pattern})$`, "v")
+  expect(pattern.test("杭州")).toBe(true)
+  expect(pattern.test("   ")).toBe(false)
   expect(FlightAction.prepare({}, {}).fields).toEqual([])
   expect(() => FlightAction.prepare({}, { originCity: { is_required: true } })).toThrow("Origin city")
 })
@@ -42,6 +46,16 @@ test("executes the registered target once and binds its actual flight data", () 
   expect(calls).toEqual([trip])
   expect(result.user?.attributes.flights.map((flight) => flight.fare)).toEqual([612, 612])
   expect(JSON.parse(result.tool.content)).toMatchObject({ results: { ...trip } })
+})
+
+test("reports a rejected named value separately from its Widget diagnostic", () => {
+  const results = FlightAction.simulate(trip)
+  const first = { ...results.flights[0], fare: "560" }
+  expect(FlightAction.bind({ results: { ...results, flights: [first] } })).toEqual({
+    rejectedOutput: "results",
+    path: "$.outputs.results.flights.0.fare",
+  })
+  expect(FlightAction.bind({ notice: "available" })).toEqual({ path: "$.outputs.results" })
 })
 
 test("rejects an invalid date before calling the target and rejects invalid target output", () => {

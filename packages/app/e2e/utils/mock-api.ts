@@ -52,6 +52,11 @@ export class MockNotFound extends Schema.TaggedError<MockNotFound>()("MockNotFou
   message: Schema.String,
 }) {}
 
+export class MockFormInvalidAnswer extends Schema.TaggedError<MockFormInvalidAnswer>()("FormInvalidAnswerError", {
+  id: Schema.String,
+  message: Schema.String,
+}) {}
+
 export class MockBadRequest extends Schema.TaggedError<MockBadRequest>()("MockBadRequest", {
   message: Schema.String,
 }) {}
@@ -443,6 +448,7 @@ const Group = HttpApiGroup.make("mock")
       params: { ...SessionParams, formID: Schema.String },
       payload: JsonPayload,
       success: NoContent,
+      error: MockFormInvalidAnswer.pipe(HttpApiSchema.status(400)),
     }),
   )
   .add(
