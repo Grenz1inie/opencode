@@ -6,6 +6,7 @@
   "license": "MIT",
   "exports": {
     "./actions": "./src/actions.ts",
+    "./flight-widget": "./src/tools/flight-widget.tsx",
     "./document": "./src/document.ts",
     "./message": "./src/message/current-message.tsx",
     "./timeline/projection": "./src/timeline/projection.ts",
@@ -73,6 +74,7 @@
     "@kitlangton/solid-motion": "0.2.2",
     "@kobalte/core": "catalog:",
     "@opencode/client": "workspace:*",
+    "@opencode/flight-action": "workspace:*",
     "@opencode/patchmark": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@opencode/util": "workspace:*",

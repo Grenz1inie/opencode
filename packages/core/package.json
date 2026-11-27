@@ -120,6 +120,7 @@
     "@modelcontextprotocol/server": "2.4.0",
     "@opencode/pty": "0.6.0",
     "@opencode/ai": "workspace:*",
+    "@opencode/flight-action": "workspace:*",
     "@opencode/codemode": "workspace:*",
     "@opencode/plugin": "workspace:*",
     "@opencode/plugin-browser": "workspace:*",

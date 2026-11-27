@@ -1,3 +1,4 @@
+import { FlightAction } from "@opencode/flight-action"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { untrack } from "solid-js"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "./detail"
@@ -154,6 +155,7 @@ function placeFact(fact: Placeable, detail: TimelineDetail, timeline: TimelineKi
   if (!category) return { category, placement: "hidden", group: "part" }
 
   const setting = detail[category].placement
+  if (fact.tool === FlightAction.definition.name) return { category, placement: "separate", group: "part" }
   const settled = fact.status !== "streaming" && fact.status !== "running"
 
   if (timeline === "current") {

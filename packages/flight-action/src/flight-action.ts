@@ -68,7 +68,7 @@ export function simulate(input: Input): Results {
   return {
     ...input,
     flights: [
-      { number: "CA 1741", departure: "08:20", arrival: "11:10", duration: "2h 50m", fare: 560 },
+      { number: "CA 1741", departure: "08:20", arrival: "11:10", duration: "2h 50m", fare: input.dateOfTravel === "2026-12-06" ? 570 : 560 },
       { number: "MU 5495", departure: "14:10", arrival: "17:05", duration: "2h 55m", fare: 620 },
     ],
   }
