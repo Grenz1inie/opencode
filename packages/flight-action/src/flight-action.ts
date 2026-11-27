@@ -151,6 +151,6 @@ export function readBinding(expression: string, scope: Readonly<Record<string, u
   const path = /^\{!([$\w]+(?:\.\w+)+)\}$/.exec(expression)?.[1]
   return path?.split(".").reduce<unknown>((value, key) => {
     if (!value || typeof value !== "object" || !Object.hasOwn(value, key)) return undefined
-    return Object.getOwnPropertyDescriptor(value, key)?.value
+    return Reflect.get(value, key)
   }, scope)
 }

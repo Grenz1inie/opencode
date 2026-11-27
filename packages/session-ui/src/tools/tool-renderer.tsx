@@ -28,8 +28,8 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import { Dynamic } from "solid-js/web"
 import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode/ui/context/file"
-import { FlightAction } from "@opencode/flight-action"
-import { FlightWidget } from "./flight-widget"
+import { ActionResult } from "./action-result"
+import { isActionResult } from "./action-result-state"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
 import { createDisclosure } from "../components/disclosure"
@@ -1378,27 +1378,6 @@ export const ToolRegistry = {
   render: getTool,
 }
 
-ToolRegistry.register({
-  name: FlightAction.definition.name,
-  render(props) {
-    const i18n = useI18n()
-    const decode = Schema.decodeUnknownOption(FlightAction.View)
-    const view = createMemo(() => Option.getOrUndefined(decode(props.metadata.flightAction)))
-    return (
-      <Show
-        when={view()}
-        fallback={
-          <span role="status">
-            {i18n.t(props.status === "completed" ? "ui.flightAction.invalid" : "ui.flightAction.pending")}
-          </span>
-        }
-      >
-        {(result) => <FlightWidget view={result()} label={i18n.t("ui.flightAction.results")} />}
-      </Show>
-    )
-  },
-})
-
 export function FileTool(props: ToolProps & { title: string; count: number; children?: JSX.Element }) {
   const i18n = useI18n()
 
@@ -1592,6 +1571,9 @@ export function ToolDisplay(
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
         <Switch>
+          <Match when={isActionResult(props.tool, props.metadata)}>
+            <ActionResult tool={props.tool} status={props.status} metadata={props.metadata} />
+          </Match>
           <Match when={stopped()}>
             {(stopped) => (
               <>

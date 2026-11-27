@@ -48,10 +48,7 @@ export const Plugin = {
                 try: () => FlightAction.run(input),
                 catch: (error) => new ToolFailure({ message: "Invalid flight search result", error }),
               })
-              return {
-                content: JSON.stringify(result.model ?? {}),
-                metadata: result.user ? { flightAction: result.user } : {},
-              }
+              return result.tool
             }),
         })
       })

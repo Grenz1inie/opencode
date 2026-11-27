@@ -3,6 +3,8 @@ import { createMemo, Match, Show, Switch, type Component } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { GenericTool } from "../../components/basic-tool"
 import { useData } from "../../context"
+import { ActionResult } from "../../tools/action-result"
+import { isActionResult } from "../../tools/action-result-state"
 import { stoppedShell } from "../../tools/run-machine"
 import {
   sessionLink,
@@ -72,6 +74,9 @@ export function ToolDisplay(
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
         <Switch>
+          <Match when={isActionResult(props.tool, props.metadata)}>
+            <ActionResult tool={props.tool} status={props.status} metadata={props.metadata} />
+          </Match>
           <Match when={stopped()}>
             {(stopped) => <Dynamic component={render()} {...props} output={stopped().output} />}
           </Match>
