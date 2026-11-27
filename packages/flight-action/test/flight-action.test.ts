@@ -26,8 +26,12 @@ test("uses a text field for missing cities and respects collection policy defaul
     title: "Origin city",
     type: "string",
     required: true,
-    pattern: "\\S",
+    pattern: "^\\s*\\S.*",
   }])
+  const city = FlightAction.prepare({ ...trip, originCity: "" }).fields.find((field) => "pattern" in field)
+  const pattern = new RegExp(`^(?:${city?.pattern})$`, "v")
+  expect(pattern.test("杭州")).toBe(true)
+  expect(pattern.test("   ")).toBe(false)
   expect(FlightAction.prepare({}, {}).fields).toEqual([])
   expect(() => FlightAction.prepare({}, { originCity: { is_required: true } })).toThrow("Origin city")
 })

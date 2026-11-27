@@ -13,6 +13,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import {
+  sessionActionFormRequest,
   sessionFormRequest,
   sessionMayHoldRequests,
   sessionPermissionRequest,
@@ -131,13 +132,13 @@ export function createSessionRequestModel() {
     if (websearch.request() || questionRequest()) return
     const form = formRequest()
 
-    if (form?.metadata?.kind === "mcp-elicitation" || form?.metadata?.kind === "action") return form
+    if (form?.metadata?.kind === "mcp-elicitation") return form
 
     const ref = location()
-
-    if (!ref) return
-
-    return data.session.form.list("global", ref)?.find((item) => item.metadata?.kind === "mcp-elicitation")
+    const locationForm = ref && data.session.form.list("global", ref)?.find(
+      (item) => item.metadata?.kind === "mcp-elicitation",
+    )
+    return locationForm ?? sessionActionFormRequest(data.session.list(), data.session.form.list, params.id)
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {

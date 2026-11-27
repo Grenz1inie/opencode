@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onCleanup, runWithOwner, untrack } from "solid-js"
-import type { FormInfo, LocationRef } from "@opencode/client/promise"
+import { isFormInvalidAnswerError, type FormInfo, type LocationRef } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
 import type { ServerSDK } from "@/runtime/server/client"
 import { ScopedKey } from "@/runtime/server/scope"
@@ -11,6 +11,7 @@ import {
   elicitationFields,
   isElicitationBusy,
   selectElicitationDraft,
+  selectElicitationFieldError,
   transitionElicitationDock,
   type ElicitationDockEvent,
   type ElicitationDraft,
@@ -87,8 +88,20 @@ export function createElicitationDock(input: {
           : input.forms.cancel(target, request.location),
       ).then(
         () => dispatch({ type: "request.succeeded", attempt }),
-        (error) =>
-          dispatch({ type: "request.failed", attempt, error: error instanceof Error ? error.message : String(error) }),
+        (error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          // The form API identifies the field at the end of its validation message.
+          const field =
+            action.type === "reply" &&
+            request.metadata?.kind === "action" &&
+            isFormInvalidAnswerError(error) &&
+            error.id === request.id
+              ? elicitationFields(request.fields).find(
+                  (field) => field.type === "string" && message.endsWith(`: ${field.key}`),
+                )?.key
+              : undefined
+          dispatch({ type: "request.failed", attempt, error: message, field })
+        },
       )
     })
   }
@@ -114,6 +127,7 @@ export function createElicitationDock(input: {
     fields,
     busy: () => isElicitationBusy(dockState()),
     draft: () => selectElicitationDraft(dockState()),
+    fieldError: (key: string) => selectElicitationFieldError(dockState(), key),
     setText: (key: string, value: string) => dispatch({ type: "text.set", key, value }),
     setNumber: (key: string, value: string) => dispatch({ type: "number.set", key, value }),
     setFlag: (key: string, value: boolean) => dispatch({ type: "flag.set", key, value }),

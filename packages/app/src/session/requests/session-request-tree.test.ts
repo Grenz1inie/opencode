@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
-import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { sessionActionFormRequest, sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 
 // SAFETY: the request tree reads only a session's id and parentID.
 const session = (input: { id: string; parentID?: string }) =>
@@ -81,6 +81,17 @@ describe("sessionPermissionRequest", () => {
   ])("%s", (_name, permissions, include, id) => {
     expect(sessionPermissionRequest(tree, permissions, "root", include)?.id).toBe(id)
   })
+})
+
+test("leaves existing session forms selectable when an Action is also pending", () => {
+  const action: FormInfo = { ...question("flight", "root"), metadata: { kind: "action" } }
+  const mcp: FormInfo = { ...question("mcp", "root"), metadata: { kind: "mcp-elicitation", server: "release" } }
+  for (const legacy of [question("q", "root"), search("search", "root"), mcp]) {
+    const forms = { root: [action, legacy] }
+    expect(sessionFormRequest(tree, forms, "root")).toBe(legacy)
+    expect(sessionActionFormRequest(tree, (id) => (id === "root" ? forms.root : undefined), "root")).toBe(action)
+  }
+  expect(sessionFormRequest(tree, { root: [action] }, "root")).toBeUndefined()
 })
 
 describe("sessionFormRequest", () => {

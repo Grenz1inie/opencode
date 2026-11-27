@@ -5,7 +5,9 @@ export { ActionOutput } from "./action-output.js"
 import { Schema, SchemaIssue } from "effect"
 import { ActionOutput } from "./action-output.js"
 
-const city = Schema.String.check(Schema.isPattern(/\S/))
+// The same pattern runs with implicit whole-value matching in HTML inputs.
+const nonblank = /^\s*\S.*/
+const city = Schema.String.check(Schema.isPattern(nonblank))
 const date = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)).check(
   Schema.makeFilter((value) => {
     const day = new Date(`${value}T00:00:00.000Z`)
@@ -75,7 +77,7 @@ export function prepare(input: unknown, policy: InputPolicy = definition.inputs)
       required: true,
       ...(definition.inputs[key].lightningType === "lightning__dateType"
         ? { format: "date" as const, placeholder: "YYYY-MM-DD" }
-        : { pattern: "\\S" }),
+        : { pattern: nonblank.source }),
     }]
   })
   return { values, fields }

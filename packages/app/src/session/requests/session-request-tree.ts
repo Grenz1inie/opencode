@@ -82,7 +82,14 @@ export function sessionFormRequest(
     (item) =>
       item.metadata?.kind === "question" ||
       item.metadata?.kind === "websearch.provider" ||
-      item.metadata?.kind === "mcp-elicitation" ||
-      item.metadata?.kind === "action",
+      item.metadata?.kind === "mcp-elicitation",
   )
+}
+
+export function sessionActionFormRequest(
+  session: SessionInfo[],
+  request: (sessionID: string) => FormInfo[] | undefined,
+  sessionID?: string,
+) {
+  return sessionTreeRequest(session, request, sessionID, (item) => item.metadata?.kind === "action")
 }
