@@ -41,7 +41,7 @@ test("executes the registered target once and binds its actual flight data", () 
   })
   expect(calls).toEqual([trip])
   expect(result.user?.attributes.flights.map((flight) => flight.fare)).toEqual([612, 612])
-  expect(result.model?.results.flights[0]?.fare).toBe(612)
+  expect(JSON.parse(result.tool.content)).toMatchObject({ results: { ...trip } })
 })
 
 test("rejects an invalid date before calling the target and rejects invalid target output", () => {

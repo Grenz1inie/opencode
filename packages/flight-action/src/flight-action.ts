@@ -1,6 +1,9 @@
 export * as FlightAction from "./flight-action.js"
 
-import { Schema } from "effect"
+export { ActionOutput } from "./action-output.js"
+
+import { Schema, SchemaIssue } from "effect"
+import { ActionOutput } from "./action-output.js"
 
 const city = Schema.String.check(Schema.isPattern(/\S/))
 const date = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)).check(
@@ -95,6 +98,7 @@ export const renderer = {
 } as const
 
 const override = renderer.renderer.componentOverrides.$
+export const widget = override.definition
 
 export const View = Schema.Struct({
   definition: Schema.Literal(override.definition),
@@ -120,13 +124,27 @@ export function run(input: unknown, target: (input: Input) => unknown = targets[
   const results = Schema.decodeUnknownSync(lightningTypes[output.complex_data_type_name])(
     target(Schema.decodeUnknownSync(Input)(input)),
   )
-  const attributes = Object.fromEntries(
-    Object.entries(override.attributes).map(([name, expression]) => [name, readBinding(expression, { $attrs: results })]),
-  )
+  const projections = ActionOutput.project(definition.outputs, { results })
+  const bound = bind(projections.user)
   return {
-    user: output.is_displayable ? Schema.decodeUnknownSync(View)({ definition: override.definition, attributes }) : undefined,
-    model: output.filter_from_agent ? undefined : { results },
+    user: bound.view,
+    model: projections.model,
+    tool: ActionOutput.result(projections, Object.hasOwn(projections.user, "results") ? widget : undefined),
   }
+}
+
+const decodeView = Schema.decodeUnknownResult(View)
+const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
+
+export function bind(outputs: Schema.JsonObject): { view?: View; path?: string } {
+  if (!Object.hasOwn(outputs, "results")) return { path: "$.outputs.results" }
+  const attributes = Object.fromEntries(
+    Object.entries(override.attributes).map(([name, expression]) => [name, readBinding(expression, { $attrs: outputs.results })]),
+  )
+  const decoded = decodeView({ definition: widget, attributes })
+  if (decoded._tag === "Success") return { view: decoded.success }
+  const path = formatIssues(decoded.failure.issue).issues[0]?.path
+  return { path: "$" + (path?.length ? "." + path.map(String).join(".") : ".attributes") }
 }
 
 export function readBinding(expression: string, scope: Readonly<Record<string, unknown>>): unknown {
