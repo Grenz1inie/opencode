@@ -72,7 +72,7 @@ test("opens a prefilled date request using the registered node and preserves the
   }, initial.attributes)
   const operation = Widget.operation(FlightAction.widget, node)
   const change = FlightAction.reschedule(initial, operation)
-  expect(change?.values).toEqual(missing.values)
+  expect(change?.values).toEqual({ originCity: "杭州", destinationCity: "成都" })
   expect(change?.fields).toMatchObject([{ key: "dateOfTravel", default: "2026-12-05", format: "date" }])
   expect(FlightAction.reschedule(initial, { ...FlightAction.changeDate, node: "unknown" })).toBeUndefined()
   expect(FlightAction.reschedule(initial, { ...FlightAction.changeDate, definition: "action/openLink" })).toBeUndefined()
