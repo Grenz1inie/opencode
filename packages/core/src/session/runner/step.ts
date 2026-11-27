@@ -11,11 +11,9 @@ import type { Agent } from "@opencode/schema/agent"
 import { Cause, Clock, Data, Deferred, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
 import { Bus } from "../../bus.js"
-import { Permission } from "../../permission.js"
 import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
 import { ToolOutput } from "../../tool-output.js"
-import { QuestionTool } from "../../tool/plugin/question.js"
 import { StepFailedError } from "../error.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
@@ -26,6 +24,8 @@ import { SessionUsage } from "../usage.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
+
+type DeclinedTool = Exclude<SessionModelRequest.ExecuteError, Tool.Error>
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
@@ -103,7 +103,7 @@ export const make = Effect.gen(function* () {
     let endsTurn = false
     const toolRuns: Array<{
       readonly call: ToolCall
-      readonly fiber: Fiber.Fiber<void, Permission.DeclinedError | QuestionTool.CancelledError>
+      readonly fiber: Fiber.Fiber<void, DeclinedTool>
       readonly cancel: Cancel
     }> = []
     const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
@@ -270,9 +270,9 @@ export const make = Effect.gen(function* () {
             type: "aborted",
             message: input.isLocationClosed()
               ? "Interaction cancelled because the location shut down"
-              : decline.reason._tag === "QuestionTool.CancelledError"
-                ? decline.reason.message
-                : "The user declined this tool call",
+              : decline.reason._tag === "Permission.DeclinedError"
+                ? "The user declined this tool call"
+                : decline.reason.message,
           })
         const interrupted = tools.declines.length > 0 || streamInterrupted || tools.interrupted
         const toolFailure = interrupted
@@ -350,7 +350,7 @@ const isInterruptedStream = (failure: AIError) => {
 
 /** Tool.Error settles in each fiber; only user declines remain in the typed error channel. */
 const classifyToolExits = (
-  exits: ReadonlyArray<Exit.Exit<void, Permission.DeclinedError | QuestionTool.CancelledError>>,
+  exits: ReadonlyArray<Exit.Exit<void, DeclinedTool>>,
   runs: ReadonlyArray<{ readonly call: ToolCall }>,
   // The step was interrupted while it waited for its tools.
   interruptedWhileWaiting: boolean,

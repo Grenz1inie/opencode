@@ -37,6 +37,7 @@ import { App } from "../app.js"
 import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
+import { FlightActionTool } from "../tool/plugin/flight-action.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
 import { SessionAffinity } from "./affinity.js"
@@ -65,7 +66,7 @@ const WINDOW_HEADROOM = 0.01
 const OUTPUT_TOKEN_MIN = 1_024
 
 /** Tool errors, plus the user declining a permission or dismissing a question. */
-export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
+export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError | FlightActionTool.CancelledError
 
 export interface Prepared<Event = SessionRequest> {
   readonly event: Event
@@ -443,8 +444,10 @@ export const layer = Layer.effect(
                 const decline = cause.reasons
                   .map((r) => (Cause.isDieReason(r) ? r.defect : Cause.isFailReason(r) ? r.error.error : undefined))
                   .find(
-                    (value): value is Permission.DeclinedError | QuestionTool.CancelledError =>
-                      value instanceof Permission.DeclinedError || value instanceof QuestionTool.CancelledError,
+                    (value): value is Permission.DeclinedError | QuestionTool.CancelledError | FlightActionTool.CancelledError =>
+                      value instanceof Permission.DeclinedError ||
+                      value instanceof QuestionTool.CancelledError ||
+                      value instanceof FlightActionTool.CancelledError,
                   )
                 return decline ? Result.succeed(decline) : Result.fail(cause)
               },
