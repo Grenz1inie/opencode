@@ -2,6 +2,7 @@ import { ActionOutput, FlightAction } from "@opencode/flight-action"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Option, Schema } from "effect"
 import { createMemo, Match, Show, Switch } from "solid-js"
+import { ActionWidget, renderActionWidget } from "./action-widget"
 import { FlightWidget } from "./flight-widget"
 import type { ToolProps } from "./tool-renderer"
 
@@ -16,14 +17,11 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
       ? Option.getOrUndefined(legacyView(props.metadata.flightAction))
       : undefined,
   )
-  const binding = createMemo<ReturnType<typeof FlightAction.bind> | undefined>(() => {
+  const widget = createMemo(() => {
     const item = result()
-
-    if (!item?.widget) return
-
-    return item.widget === FlightAction.widget ? FlightAction.bind(item.outputs) : { path: "$.widget" }
+    return item?.widget ? renderActionWidget(item.widget, item.outputs) : undefined
   })
-  const view = () => binding()?.view ?? legacy()
+  const widgetLabel = () => widget()?.label
   const output = createMemo(() => {
     const value = result()?.outputs
 
@@ -32,12 +30,7 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
   const diagnostic = () => {
     if (Object.hasOwn(props.metadata, "actionOutput") && !result()) return "$.metadata.actionOutput"
 
-    const path = binding()?.path
-
-    if (!path) return
-
-    // Only a registered identifier is shown. A broken or unregistered reference is not a source of display text.
-    return result()?.widget === FlightAction.widget ? `${FlightAction.widget} · ${path}` : path
+    return widget()?.diagnostic
   }
 
   return (
@@ -50,9 +43,14 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
           <span role="status">{i18n.t("ui.actionOutput.failed")}</span>
         </Match>
         <Match when={true}>
-          <Show when={view()} fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>
-            {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} />}
-          </Show>
+          <Switch fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>
+            <Match when={widget()?.tree}>
+              {(tree) => <ActionWidget tree={tree()} label={i18n.t(widgetLabel() ?? "ui.actionOutput.completed")} />}
+            </Match>
+            <Match when={legacy()}>
+              {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} />}
+            </Match>
+          </Switch>
           <Show
             when={diagnostic()}
             fallback={
