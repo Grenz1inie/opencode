@@ -5,6 +5,8 @@ import { Schema } from "effect"
 type Policy = { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }
 type Projections = { readonly user: Schema.JsonObject; readonly model: Schema.JsonObject }
 
+export type Binding<View> = { view?: View; path?: string; rejectedOutput?: string }
+
 export const Presentation = Schema.Struct({
   outputs: Schema.JsonObject,
   widget: Schema.optionalKey(Schema.String),

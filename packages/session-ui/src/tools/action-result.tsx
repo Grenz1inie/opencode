@@ -16,28 +16,32 @@ export function ActionResult(props: Pick<ToolProps, "tool" | "status" | "metadat
       ? Option.getOrUndefined(legacyView(props.metadata.flightAction))
       : undefined,
   )
-  const binding = createMemo<ReturnType<typeof FlightAction.bind> | undefined>(() => {
+  const binding = createMemo(() => {
     const item = result()
-
-    if (!item?.widget) return
-
-    return item.widget === FlightAction.widget ? FlightAction.bind(item.outputs) : { path: "$.widget" }
+    if (!item) return
+    if (
+      item.widget === FlightAction.widget ||
+      (props.tool === FlightAction.definition.name && Object.hasOwn(item.outputs, "results"))
+    )
+      return FlightAction.bind(item.outputs)
   })
-  const view = () => binding()?.view ?? legacy()
+  const view = () => (result()?.widget === FlightAction.widget ? binding()?.view : legacy())
   const output = createMemo(() => {
     const value = result()?.outputs
+    if (!value) return
 
-    return value && Object.keys(value).length ? JSON.stringify(value, null, 2) : undefined
+    const rejected = binding()?.rejectedOutput
+    const visible = Object.entries(value).filter(([name]) => name !== rejected)
+    return visible.length ? JSON.stringify(Object.fromEntries(visible), null, 2) : undefined
   })
   const diagnostic = () => {
     if (Object.hasOwn(props.metadata, "actionOutput") && !result()) return "$.metadata.actionOutput"
 
+    const widget = result()?.widget
+    if (widget && widget !== FlightAction.widget) return "$.widget"
+
     const path = binding()?.path
-
-    if (!path) return
-
-    // Only a registered identifier is shown. A broken or unregistered reference is not a source of display text.
-    return result()?.widget === FlightAction.widget ? `${FlightAction.widget} · ${path}` : path
+    if (path) return `${FlightAction.widget} · ${path}`
   }
 
   return (

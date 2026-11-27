@@ -44,6 +44,16 @@ test("executes the registered target once and binds its actual flight data", () 
   expect(JSON.parse(result.tool.content)).toMatchObject({ results: { ...trip } })
 })
 
+test("reports a rejected named value separately from its Widget diagnostic", () => {
+  const results = FlightAction.simulate(trip)
+  const first = { ...results.flights[0], fare: "560" }
+  expect(FlightAction.bind({ results: { ...results, flights: [first] } })).toEqual({
+    rejectedOutput: "results",
+    path: "$.outputs.results.flights.0.fare",
+  })
+  expect(FlightAction.bind({ notice: "available" })).toEqual({ path: "$.outputs.results" })
+})
+
 test("rejects an invalid date before calling the target and rejects invalid target output", () => {
   const calls: unknown[] = []
   expect(() =>
