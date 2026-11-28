@@ -5,6 +5,7 @@ import type {
   ShellOutputInput,
   ShellOutputOutput,
 } from "@opencode/client/promise"
+import type { FlightReschedule } from "@opencode/schema/flight-reschedule"
 import { createSimpleContext } from "@opencode/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
@@ -69,6 +70,12 @@ export type ToolFileSource = {
   peek: (input: ToolFileInput) => string | undefined
 }
 
+export type FlightRescheduleHost = {
+  get: (input: FlightReschedule.Card, signal: AbortSignal) => Promise<FlightReschedule.Result | null>
+  change: (input: FlightReschedule.Change, signal: AbortSignal) => Promise<FlightReschedule.Result | null>
+  listen: (receive: (event: FlightReschedule.Changed) => void) => VoidFunction
+}
+
 export const {
   use: useData,
   provider: DataProvider,
@@ -84,6 +91,7 @@ export const {
     shellRunning?: (id: string) => boolean
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     turnDiff?: TurnDiffSource
+    flightReschedule?: FlightRescheduleHost
     readMedia?: ReadMediaUrlFn
     peekMedia?: PeekMediaUrlFn
     toolFile?: ToolFileSource
@@ -116,6 +124,9 @@ export const {
       sessionHref: props.onSessionHref,
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
+      get flightReschedule() {
+        return props.flightReschedule
+      },
       get turnDiff() {
         return props.turnDiff
       },

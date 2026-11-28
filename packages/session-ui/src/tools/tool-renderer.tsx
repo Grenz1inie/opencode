@@ -1329,6 +1329,8 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
 export interface ToolProps {
   /** The call's part id, where the timeline passes it. */
   id?: string
+  messageID?: string
+  callID?: string
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   input: Record<string, unknown>
   error?: string
@@ -1572,7 +1574,14 @@ export function ToolDisplay(
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
         <Switch>
           <Match when={isActionResult(props.tool, props.metadata)}>
-            <ActionResult tool={props.tool} status={props.status} metadata={props.metadata} />
+            <ActionResult
+              tool={props.tool}
+              status={props.status}
+              metadata={props.metadata}
+              sessionID={props.sessionID}
+              messageID={props.messageID}
+              callID={props.callID}
+            />
           </Match>
           <Match when={stopped()}>
             {(stopped) => (

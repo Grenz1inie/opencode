@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { FlightAction } from "../src/flight-action.js"
+import { FlightAction, Widget } from "../src/flight-action.js"
 
 const trip = { originCity: "杭州", destinationCity: "成都", dateOfTravel: "2026-12-05" }
 
@@ -46,6 +46,43 @@ test("executes the registered target once and binds its actual flight data", () 
   expect(calls).toEqual([trip])
   expect(result.user?.attributes.flights.map((flight) => flight.fare)).toEqual([612, 612])
   expect(JSON.parse(result.tool.content)).toMatchObject({ results: { ...trip } })
+})
+
+test("opens a prefilled date request using the registered node and preserves the route", () => {
+  const invoked: unknown[] = []
+  const execute = (input: unknown) => FlightAction.run(input, (query) => {
+    invoked.push(query)
+    return FlightAction.simulate(query)
+  })
+  const missing = FlightAction.prepare({ originCity: "杭州", destinationCity: "成都" })
+  expect(missing.fields.map((field) => field.key)).toEqual(["dateOfTravel"])
+  expect(invoked).toHaveLength(0)
+
+  const initial = execute({ ...missing.values, dateOfTravel: "2026-12-05" }).user
+  expect(initial?.attributes.flights[0]?.fare).toBe(560)
+  if (!initial) throw new Error("Expected flight results")
+
+  const node = Widget.render(FlightAction.widget, {
+    definition: "tile/button",
+    id: FlightAction.changeDate.node,
+    attributes: {
+      label: "改日期",
+      actions: { click: [{ definition: "action/sendMessage", attributes: { content: "Localize this too" } }] },
+    },
+  }, initial.attributes)
+  const operation = Widget.operation(FlightAction.widget, node)
+  const change = FlightAction.reschedule(initial, operation)
+  expect(change?.values).toEqual({ originCity: "杭州", destinationCity: "成都" })
+  expect(change?.fields).toMatchObject([{ key: "dateOfTravel", default: "2026-12-05", format: "date" }])
+  expect(FlightAction.reschedule(initial, { ...FlightAction.changeDate, node: "unknown" })).toBeUndefined()
+  expect(FlightAction.reschedule(initial, { ...FlightAction.changeDate, definition: "action/openLink" })).toBeUndefined()
+  expect(FlightAction.reschedule(initial, { ...FlightAction.changeDate, widget: "@widget/c/customerReviews" })).toBeUndefined()
+  expect(invoked).toHaveLength(1)
+
+  const updated = execute({ ...change?.values, dateOfTravel: "2026-12-06" }).user
+  expect(updated?.attributes.flights[0]?.fare).toBe(570)
+  expect(invoked).toEqual([trip, { ...trip, dateOfTravel: "2026-12-06" }])
+  expect(initial.attributes.dateOfTravel).toBe("2026-12-05")
 })
 
 test("reports a rejected named value separately from its Widget diagnostic", () => {

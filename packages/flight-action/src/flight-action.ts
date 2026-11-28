@@ -6,6 +6,7 @@ export { ActionOutput } from "./action-output.js"
 
 import { Schema, SchemaIssue } from "effect"
 import { ActionOutput } from "./action-output.js"
+import type { Widget } from "./widget.js"
 
 // The same pattern runs with implicit whole-value matching in HTML inputs.
 const nonblank = /^\s*\S.*/
@@ -51,6 +52,27 @@ type InputKey = keyof Input
 type InputPolicy = Partial<Record<InputKey, { is_required?: boolean; is_user_input?: boolean }>>
 const inputKeys = ["originCity", "destinationCity", "dateOfTravel"] as const
 const labels = { originCity: "Origin city", destinationCity: "Destination city", dateOfTravel: "Departure date" }
+
+type InputField = {
+  key: InputKey
+  title: string
+  type: "string"
+  required: true
+  format?: "date"
+  placeholder?: string
+  pattern?: string
+  default?: string
+}
+type InputRequest = { values: Partial<Input>; fields: InputField[] }
+
+const dateField = {
+  key: "dateOfTravel",
+  title: labels.dateOfTravel,
+  type: "string",
+  required: true,
+  format: "date",
+  placeholder: "YYYY-MM-DD",
+} as const satisfies InputField
 const Draft = Schema.Struct({
   originCity: Schema.optionalKey(Schema.Unknown),
   destinationCity: Schema.optionalKey(Schema.Unknown),
@@ -61,10 +83,10 @@ export function formable(key: string, policy: InputPolicy = definition.inputs) {
   return inputKeys.some((field) => field === key && policy[field]?.is_user_input === true)
 }
 
-export function prepare(input: unknown, policy: InputPolicy = definition.inputs) {
+export function prepare(input: unknown, policy: InputPolicy = definition.inputs): InputRequest {
   const draft = Schema.decodeUnknownSync(Draft)(input)
   const values: Partial<Record<InputKey, string>> = {}
-  const fields = inputKeys.flatMap((key) => {
+  const fields = inputKeys.flatMap<InputField>((key) => {
     const value = Schema.decodeUnknownOption(Input.fields[key])(draft[key])
     if (value._tag === "Some") {
       values[key] = value.value
@@ -72,15 +94,8 @@ export function prepare(input: unknown, policy: InputPolicy = definition.inputs)
     }
     if (policy[key]?.is_required !== true) return []
     if (!formable(key, policy)) throw new Error(`Missing or invalid input: ${labels[key]}`)
-    return [{
-      key,
-      title: labels[key],
-      type: "string" as const,
-      required: true,
-      ...(definition.inputs[key].lightningType === "lightning__dateType"
-        ? { format: "date" as const, placeholder: "YYYY-MM-DD" }
-        : { pattern: nonblank.source }),
-    }]
+    if (definition.inputs[key].lightningType === "lightning__dateType") return [dateField]
+    return [{ key, title: labels[key], type: "string", required: true, pattern: nonblank.source }]
   })
   return { values, fields }
 }
@@ -109,6 +124,19 @@ export const View = Schema.Struct({
   attributes: Results,
 })
 export type View = typeof View.Type
+
+export const changeDate = {
+  widget,
+  node: "change-date",
+  definition: "action/sendMessage",
+} as const satisfies Widget.Operation
+
+export function reschedule(view: View, operation: Widget.Operation | undefined) {
+  if (!operation || operation.widget !== view.definition || operation.widget !== changeDate.widget) return
+  if (operation.node !== changeDate.node || operation.definition !== changeDate.definition) return
+  const { originCity, destinationCity, dateOfTravel } = view.attributes
+  return { values: { originCity, destinationCity }, fields: [{ ...dateField, default: dateOfTravel }] as const }
+}
 
 export function simulate(input: Input): Results {
   return {

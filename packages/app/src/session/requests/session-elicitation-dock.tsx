@@ -156,6 +156,10 @@ export function SessionElicitationDock(props: {
                             aria-required={action() ? text().required : undefined}
                             aria-label={text().title ?? text().key}
                             aria-describedby={error() ? errorID : undefined}
+                            ref={(input) => {
+                              if (props.request.metadata?.operation === "reschedule" && text().format === "date")
+                                queueMicrotask(() => input.focus({ preventScroll: true }))
+                            }}
                             onInput={(event) => dock.setText(text().key, event.currentTarget.value)}
                           />
                           <Show when={error()}>

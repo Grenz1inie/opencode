@@ -1,7 +1,10 @@
 export * as Widget from "./widget.js"
 
+import { Option, Schema } from "effect"
+
 export type Node = {
   definition: string
+  id?: string
   attributes?: Readonly<Record<string, unknown>>
   children?: readonly Node[]
   meta?: { forEach?: string; forItem?: string; if?: string }
@@ -9,6 +12,7 @@ export type Node = {
 
 export type Rendered = {
   definition: Node["definition"]
+  id?: string
   attributes: Node["attributes"]
   text?: string
   repeated: boolean
@@ -17,7 +21,25 @@ export type Rendered = {
 
 type Scope = Readonly<Record<string, unknown>>
 const pathToken = /^\{!(\$\w+(?:\.\w+)+)\}$/
-const tiles = new Set(["tile/widget", "tile/column", "tile/row", "tile/text", "tile/icon", "tile/separator"])
+const tiles = new Set(["tile/widget", "tile/column", "tile/row", "tile/text", "tile/icon", "tile/separator", "tile/button"])
+
+export type Operation = { widget: string; node: string; definition: string }
+
+const click = Schema.decodeUnknownOption(
+  Schema.Struct({
+    click: Schema.Array(Schema.Struct({
+      definition: Schema.String,
+      attributes: Schema.Struct({ content: Schema.String }),
+    })),
+  }),
+)
+
+export function operation(widget: string, node: Rendered): Operation | undefined {
+  if (node.definition !== "tile/button" || !node.id) return
+  const actions = Option.getOrUndefined(click(node.attributes?.actions))?.click
+  if (actions?.length !== 1 || !actions[0]) return
+  return { widget, node: node.id, definition: actions[0].definition }
+}
 
 export class BindingError extends Error {
   constructor(readonly resource: string, readonly path: string, reason: string) {
@@ -61,6 +83,7 @@ function expand(resource: string, node: Node, scope: Scope, path: string): Rende
     const text = node.attributes?.text
     return [{
       definition: node.definition,
+      ...(node.id ? { id: node.id } : {}),
       attributes: node.attributes,
       text: typeof text === "string" ? interpolate(resource, path + ".attributes.text", text, current) : undefined,
       repeated: node.meta?.forEach !== undefined,
