@@ -9,7 +9,7 @@ export const wildcard = "all"
  */
 export const registry = {
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
-  flight_action: "Enable the experimental simulated flight search tool and result cards.",
+  flight_action: "Enable the experimental Action UI examples for flights, reviews, and case input.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   console_watches:
