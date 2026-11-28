@@ -300,6 +300,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
             tool: context.tool,
             event: context.event,
             permission: context.permission,
+            assertNotDenied: permission.assertNotDenied,
+            readSession: context.session.get,
             forms,
           }),
       },

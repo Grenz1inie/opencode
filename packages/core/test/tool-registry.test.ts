@@ -250,12 +250,16 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make() }, { codemode: false })
-      yield* service.transform((editor) =>
+      yield* service.transform((editor) => {
         editor.update("echo", (tool) => {
           Object.assign(tool, { description: undefined })
-        }),
-      )
-      expect((yield* service.snapshot()).definitions[0]?.description).toBe("Echo text")
+        })
+        editor.update("echo", (tool) => {
+          Object.assign(tool, { available: true })
+        })
+      })
+      const snapshot = yield* service.snapshot(undefined, { context: { sessionID, agent: identity.agent } })
+      expect(snapshot.definitions[0]?.description).toBe("Echo text")
       expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "echo" })
     }),
   )

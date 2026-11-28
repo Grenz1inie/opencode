@@ -66,6 +66,7 @@ export interface Policy {
 }
 
 export interface SnapshotOptions {
+  readonly context?: Tool.RequestContext
   /**
    * With `full_codemode`, Code Mode gets the experimental `path` and `Bun` globals, which act through `services`: the
    * session's Location and file services.
@@ -327,6 +328,7 @@ const layer = Layer.effect(
           for (const [name, tool] of data.tools) {
             if (hidden?.has(name)) continue
             if (PermissionPolicy.isActionDenied(policy, tool.options?.permission ?? name)) continue
+            if (tool.available && (!options?.context || !(yield* tool.available(options.context)))) continue
             if (codeModeEnabled && defaultCodeMode(tool) && !keepDirect?.has(name)) {
               codemodeEntries.push([name, tool])
               continue
@@ -527,6 +529,10 @@ function register(id: string, tool: Tool.Info): Result.Result<ToolDefinition, Re
     return Result.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
   if (!defaultCodeMode(tool) && id === "execute")
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+  if (tool.available !== undefined && typeof tool.available !== "function")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: available must be a function` }),
+    )
   // Standard Schema libraries such as ArkType make schemas that are functions.
   if (!isSchemaValue(tool.input))
     return Result.fail(

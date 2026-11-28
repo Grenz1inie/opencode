@@ -2,6 +2,7 @@ import { CaseAction } from "@opencode/flight-action"
 import { createUniqueId, For, Match, Show, Switch as Branch } from "solid-js"
 import { Option, Schema } from "effect"
 import type { FormInfo, FormStringField, LocationRef } from "@opencode/client/promise"
+import { isActionConfirmation } from "@opencode/schema/form"
 import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Select } from "@opencode/ui/select"
@@ -43,6 +44,7 @@ export function SessionElicitationDock(props: {
 
   const message = () => Option.getOrUndefined(decodeMessage(props.request.metadata?.message))
   const action = () => props.request.metadata?.kind === "action"
+  const confirmation = () => isActionConfirmation(props.request.metadata)
   const caseEditor = () => action() && CaseAction.isEditor(props.request.metadata?.editor)
   const errorID = createUniqueId()
 
@@ -62,7 +64,7 @@ export function SessionElicitationDock(props: {
 
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.altKey) {
             event.preventDefault()
-            dock.reply()
+            if (!confirmation()) dock.reply()
           }
         }}
         header={
@@ -88,18 +90,18 @@ export function SessionElicitationDock(props: {
         footer={
           <>
             <Button variant="ghost" size="large" disabled={dock.busy()} onClick={dock.dismiss}>
-              {language.t("ui.common.dismiss")}
+              {language.t(confirmation() ? "ui.common.cancel" : "ui.common.dismiss")}
             </Button>
             <div data-slot="question-footer-actions">
               <Button variant="submit" size="large" disabled={dock.busy()} onClick={dock.reply}>
-                {language.t("ui.common.submit")}
+                {language.t(confirmation() ? "ui.common.confirm" : "ui.common.submit")}
               </Button>
             </div>
           </>
         }
       >
         <div data-slot="elicitation-fields">
-          <For each={dock.fields()}>
+          <For each={confirmation() ? [] : dock.fields()}>
             {(field) => (
               <div data-slot="elicitation-field">
                 <Branch>

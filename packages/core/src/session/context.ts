@@ -181,6 +181,7 @@ const layer = Layer.effect(
       const fallbackRef = session.model ?? agent.info.model
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
       const tools = yield* registry.snapshot(policy, {
+        context: { sessionID: session.id, agent: agent.id, sessionMetadata: session.metadata },
         services,
         api: Context.make(CodeModeApi.Service, opencodeApi ? api : CodeModeApi.disabled).pipe(
           Context.add(Location.Service, location),

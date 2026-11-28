@@ -4,6 +4,7 @@ import { Bus } from "@opencode/core/bus"
 import { Flag } from "@opencode/core/flag"
 import { Form } from "@opencode/core/form"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
 import { Tool } from "@opencode/core/tool"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import { Session } from "@opencode/schema/session"
@@ -70,6 +71,97 @@ const openForm = <A, E>(invocation: Effect.Effect<A, E>) =>
     const form = yield* Effect.raceFirst(Deferred.await(created), finished).pipe(Effect.ensuring(unsubscribe))
     return { form, fiber }
   })
+
+it.live("advertises an Action only for an eligible session and rechecks captured calls against current policy", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const sessionID = Session.ID.make("ses_action")
+    const agent = Agent.ID.make("build")
+    const host = yield* PluginHost.make(plugins, "setup-action-session")
+    yield* host.session.create({ id: sessionID, metadata: { workspace: "lab:ses_action" } })
+    const eligible = new Set([sessionID])
+    const received: Schema.JsonObject[] = []
+    const action = {
+      ...definition,
+      available: ({ sessionID }) => Effect.sync(() => eligible.has(sessionID)),
+      inputs: {
+        ...definition.inputs,
+        workspace: {
+          type: "sampleId",
+          is_required: true,
+          is_user_input: true,
+          bind: ({ sessionMetadata }) =>
+            Effect.succeed(typeof sessionMetadata?.workspace === "string" ? sessionMetadata.workspace : undefined),
+        },
+      },
+    } satisfies Definition
+
+    yield* plugins.activate([
+      extension("session-action", {
+        actions: [action],
+        types,
+        widgets: { [definition.widget]: view },
+        targets: {
+          [action.target]: (input) => Effect.sync(() => {
+            received.push(input)
+            return { receipt: { sampleID: input.sampleID, marker: "ok" }, note: "ok" }
+          }),
+        },
+      }),
+    ])
+
+    const request = { context: { sessionID, agent } }
+    const active = yield* tools.snapshot(undefined, request)
+    expect(active.definitions.find((entry) => entry.name === action.name)?.inputSchema).toMatchObject({
+      properties: { sampleID: { type: "string" } },
+      required: ["sampleID"],
+    })
+    expect(active.definitions.find((entry) => entry.name === action.name)?.inputSchema.properties).not.toHaveProperty("workspace")
+    const other = yield* tools.snapshot(undefined, { context: { agent, sessionID: Session.ID.make("ses_other") } })
+    expect(other.definitions.map((entry) => entry.name)).not.toContain(action.name)
+    yield* execute(active, { sampleID: "CAL-28", workspace: "model-supplied" })
+    expect(received).toEqual([{ sampleID: "CAL-28", workspace: "lab:ses_action" }])
+
+    eligible.delete(sessionID)
+    const next = yield* tools.snapshot(undefined, request)
+    expect(next.definitions.map((entry) => entry.name)).not.toContain(action.name)
+    const stale = yield* execute(active, { sampleID: "CAL-29" }).pipe(Effect.flip)
+    expect(stale.message).toContain("not currently available")
+    expect(received).toHaveLength(1)
+  }),
+)
+
+it.live("never substitutes model input for an absent optional binding", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const host = yield* PluginHost.make(plugins, "setup-action-session")
+    yield* host.session.create({ id: Session.ID.make("ses_action") })
+    const received: Schema.JsonObject[] = []
+    const action = {
+      name: "bound_only",
+      description: "Inspect the bound workspace if present.",
+      target: "local://bound-only",
+      inputs: { workspace: { type: "sampleId", bind: () => Effect.undefined } },
+      outputs: {},
+    } satisfies Definition
+    yield* plugins.activate([
+      extension("bound-only", {
+        actions: [action],
+        types,
+        targets: {
+          [action.target]: (input) => Effect.sync(() => {
+            received.push(input)
+            return {}
+          }),
+        },
+      }),
+    ])
+    yield* execute(yield* tools.snapshot(), { workspace: "model-supplied" }, action.name)
+    expect(received).toEqual([{}])
+  }),
+)
 
 it.live("collects only missing or invalid required input and runs the target once on a valid answer", () =>
   Effect.gen(function* () {
@@ -158,6 +250,68 @@ it.live("collects only missing or invalid required input and runs the target onc
     yield* forms.reply({ id: numeric.id, answer: values })
     yield* Fiber.join(typed)
     expect(calls[3]).toEqual({ ...known, ...values, visitDate: "2027-05-14" })
+  }),
+)
+
+it.live("waits for explicit business confirmation, and rechecks availability after the user decides", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const forms = yield* Form.Service
+    const received: Schema.JsonObject[] = []
+    const host = yield* PluginHost.make(plugins, "setup-action-session")
+    yield* host.session.create({ id: Session.ID.make("ses_action") })
+    let available = true
+    const action = {
+      ...definition,
+      available: () => Effect.sync(() => available),
+      confirmation: { title: "Confirm publication", message: "Publish the reviewed calibration report." },
+    } satisfies Definition
+    yield* plugins.activate([
+      extension("confirm-action", {
+        actions: [action],
+        types,
+        widgets: { [definition.widget]: view },
+        targets: {
+          [action.target]: (input) => Effect.sync(() => {
+            received.push(input)
+            return { receipt: { sampleID: input.sampleID, marker: "published" }, note: "ok" }
+          }),
+        },
+      }),
+    ])
+
+    const snapshot = yield* tools.snapshot(undefined, {
+      context: { sessionID: Session.ID.make("ses_action"), agent: Agent.ID.make("build") },
+    })
+    const supplied = { sampleID: "CAL-28", confirmed: true }
+    const approval = yield* openForm(execute(snapshot, supplied))
+    expect(approval.form.title).toBe("Confirm publication")
+    expect(approval.form.metadata).toMatchObject({ kind: "action", operation: "confirm", action: action.name })
+    expect(received).toEqual([])
+    const permission = { id: approval.form.id, answer: { confirmed: true } }
+    yield* forms.reply(permission)
+    expect((yield* forms.reply(permission).pipe(Effect.flip))._tag).toBe("Form.AlreadySettledError")
+    yield* Fiber.join(approval.fiber)
+    expect(received).toEqual([{ sampleID: "CAL-28" }])
+
+    const cancel = yield* openForm(execute(snapshot, supplied).pipe(
+      Effect.catchDefect((error) => error instanceof Form.CancelledError ? Effect.succeed(error) : Effect.die(error)),
+    ))
+    yield* forms.cancel(cancel.form.id)
+    expect(yield* Fiber.join(cancel.fiber)).toBeInstanceOf(Form.CancelledError)
+
+    const refusal = yield* openForm(execute(snapshot, supplied).pipe(
+      Effect.catchDefect((error) => error instanceof Form.CancelledError ? Effect.succeed(error) : Effect.die(error)),
+    ))
+    yield* forms.reply({ id: refusal.form.id, answer: { confirmed: false } })
+    expect(yield* Fiber.join(refusal.fiber)).toBeInstanceOf(Form.CancelledError)
+
+    const expired = yield* openForm(execute(snapshot, supplied).pipe(Effect.flip))
+    available = false
+    yield* forms.reply({ id: expired.form.id, answer: { confirmed: true } })
+    expect((yield* Fiber.join(expired.fiber)).message).toContain("not currently available")
+    expect(received).toHaveLength(1)
   }),
 )
 

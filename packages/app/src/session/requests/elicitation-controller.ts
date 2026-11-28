@@ -2,6 +2,7 @@ import { createMemo, createSignal, onCleanup, runWithOwner, untrack } from "soli
 import { CaseAction } from "@opencode/flight-action"
 import { isFormInvalidAnswerError, type FormInfo, type LocationRef } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
+import { ActionConfirmation, isActionConfirmation } from "@opencode/schema/form"
 import type { ServerSDK } from "@/runtime/server/client"
 import { ScopedKey } from "@/runtime/server/scope"
 import { showToast } from "@/shell/notifications/toast"
@@ -142,7 +143,9 @@ export function createElicitationDock(input: {
       const metadata = untrack(input.request).metadata
       const preserveText =
         metadata?.kind === "action" && (metadata.editor !== undefined || metadata.action === CaseAction.action.name)
-      const answer = buildElicitationAnswer(fields(), current.draft, preserveText)
+      const answer = isActionConfirmation(metadata)
+        ? { [ActionConfirmation.field]: true }
+        : buildElicitationAnswer(fields(), current.draft, preserveText)
 
       dispatch({ type: "send", action: { type: "reply", answer } })
     },
