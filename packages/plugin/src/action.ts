@@ -42,6 +42,8 @@ export interface Definition {
   readonly widget?: string
   /** Reads current state during model discovery and again before execution. */
   readonly available?: (context: ActionContext) => Effect.Effect<boolean>
+  /** Requires a fresh, explicit user decision for this invocation. */
+  readonly confirmation?: { readonly title: string; readonly message: string }
   readonly inputs: Readonly<Record<string, InputField>>
   readonly outputs: Readonly<
     Record<string, Field & { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }>

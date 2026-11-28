@@ -3,10 +3,11 @@ export * as ActionTool from "./action.js"
 import { ActionOutput } from "@opencode/flight-action"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import { ActionConfirmation } from "@opencode/schema/form"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { ConfigEntryObserver } from "../config/plugin/entry-observer.js"
-import type { Form } from "../form.js"
+import { Form } from "../form.js"
 import { Permission } from "../permission.js"
 import { ActionInput } from "./action-input.js"
 import { normalizedName } from "./runtime.js"
@@ -15,6 +16,8 @@ type Host = Pick<Context, "tool" | "permission" | "event"> & {
   readonly enabled: Effect.Effect<boolean>
   readonly forms: Form.Interface
 }
+
+const Confirmation = Schema.Struct({ title: Schema.NonEmptyString, message: Schema.NonEmptyString })
 
 export const register = Effect.fn("ActionTool.register")(function* (catalog: Catalog, host: Host) {
   const tools = yield* Effect.forEach(catalog.actions, (definition) =>
@@ -48,6 +51,11 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
   const available = definition.available
   if (available !== undefined && typeof available !== "function")
     return yield* new Tool.Error({ message: `Invalid availability condition for "${definition.name}" at available` })
+  const confirmation = definition.confirmation === undefined
+    ? undefined
+    : yield* Schema.decodeUnknownEffect(Confirmation)(definition.confirmation).pipe(
+        Effect.mapError((error) => new Tool.Error({ message: `Invalid confirmation for "${definition.name}": ${error.message}` })),
+      )
 
   const input = yield* Effect.fromResult(ActionInput.compile(catalog, definition, host.forms))
   const output = yield* outputFields(catalog, definition.outputs)
@@ -86,6 +94,23 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
         const request = { sessionID: context.sessionID, agent: context.agent }
         yield* requireAvailable(request)
         const values = yield* input.prepare(rawInput, context)
+        if (confirmation) {
+          const state = yield* host.forms.ask({
+            sessionID: context.sessionID,
+            title: confirmation.title,
+            metadata: {
+              kind: ActionConfirmation.kind,
+              operation: ActionConfirmation.operation,
+              message: confirmation.message,
+              action: definition.name,
+              tool: { messageID: context.messageID, id: context.id },
+            },
+            fields: [{ key: ActionConfirmation.field, type: "boolean", title: confirmation.title, required: true }],
+          }).pipe(Effect.mapError((error) => new Tool.Error({ message: error.message })))
+          if (state.status !== "answered" || state.answer[ActionConfirmation.field] !== true)
+            return yield* Effect.die(new Form.CancelledError({ action: `confirmation for "${definition.name}"` }))
+        }
+        if (confirmation || input.collects) yield* requireAvailable(request)
         yield* host.permission.assert({ action, resources: ["*"], save: ["*"], ...Permission.invocation(context) })
         const bound = input.bind ? yield* input.bind(request) : undefined
         yield* requireAvailable(request)

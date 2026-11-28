@@ -218,6 +218,66 @@ it.live("collects only missing or invalid required input and runs the target onc
   }),
 )
 
+it.live("waits for explicit business confirmation, and rechecks availability after the user decides", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const forms = yield* Form.Service
+    const received: Schema.JsonObject[] = []
+    let available = true
+    const action = {
+      ...definition,
+      available: () => Effect.sync(() => available),
+      confirmation: { title: "Confirm publication", message: "Publish the reviewed calibration report." },
+    } satisfies Definition
+    yield* plugins.activate([
+      extension("confirm-action", {
+        actions: [action],
+        types,
+        widgets: { [definition.widget]: view },
+        targets: {
+          [action.target]: (input) => Effect.sync(() => {
+            received.push(input)
+            return { receipt: { sampleID: input.sampleID, marker: "published" }, note: "ok" }
+          }),
+        },
+      }),
+    ])
+
+    const snapshot = yield* tools.snapshot(undefined, {
+      context: { sessionID: Session.ID.make("ses_action"), agent: Agent.ID.make("build") },
+    })
+    const supplied = { sampleID: "CAL-28", confirmed: true }
+    const approval = yield* openForm(execute(snapshot, supplied))
+    expect(approval.form.title).toBe("Confirm publication")
+    expect(approval.form.metadata).toMatchObject({ kind: "action", operation: "confirm", action: action.name })
+    expect(received).toEqual([])
+    const permission = { id: approval.form.id, answer: { confirmed: true } }
+    yield* forms.reply(permission)
+    expect((yield* forms.reply(permission).pipe(Effect.flip))._tag).toBe("Form.AlreadySettledError")
+    yield* Fiber.join(approval.fiber)
+    expect(received).toEqual([{ sampleID: "CAL-28" }])
+
+    const cancel = yield* openForm(execute(snapshot, supplied).pipe(
+      Effect.catchDefect((error) => error instanceof Form.CancelledError ? Effect.succeed(error) : Effect.die(error)),
+    ))
+    yield* forms.cancel(cancel.form.id)
+    expect(yield* Fiber.join(cancel.fiber)).toBeInstanceOf(Form.CancelledError)
+
+    const refusal = yield* openForm(execute(snapshot, supplied).pipe(
+      Effect.catchDefect((error) => error instanceof Form.CancelledError ? Effect.succeed(error) : Effect.die(error)),
+    ))
+    yield* forms.reply({ id: refusal.form.id, answer: { confirmed: false } })
+    expect(yield* Fiber.join(refusal.fiber)).toBeInstanceOf(Form.CancelledError)
+
+    const expired = yield* openForm(execute(snapshot, supplied).pipe(Effect.flip))
+    available = false
+    yield* forms.reply({ id: expired.form.id, answer: { confirmed: true } })
+    expect((yield* Fiber.join(expired.fiber)).message).toContain("not currently available")
+    expect(received).toHaveLength(1)
+  }),
+)
+
 it.live("reuses a named Editor for two Actions and validates the complete nested object before settling", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

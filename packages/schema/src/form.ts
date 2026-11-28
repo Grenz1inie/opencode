@@ -18,6 +18,10 @@ export type ID = typeof ID.Type
 export const Metadata = Schema.Record(Schema.String, Schema.Unknown).annotate({ identifier: "Form.Metadata" })
 export type Metadata = typeof Metadata.Type
 
+export const ActionConfirmation = { kind: "action", operation: "confirm", field: "confirmed" } as const
+export const isActionConfirmation = (metadata: Metadata | undefined) =>
+  metadata?.kind === ActionConfirmation.kind && metadata?.operation === ActionConfirmation.operation
+
 export const Option = Schema.Struct({
   value: Schema.String,
   label: Schema.String,

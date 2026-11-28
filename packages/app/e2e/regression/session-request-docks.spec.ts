@@ -612,6 +612,36 @@ test("shows only the missing date in the flight Action dock", async ({ page }) =
   expect(replies).toEqual([{ answer: { dateOfTravel: "2026-12-05" } }])
 })
 
+test("requires an explicit confirmation instead of the input form shortcut", async ({ page }) => {
+  const form = {
+    id: "frm_action_confirm",
+    sessionID,
+    title: "Publish report",
+    metadata: { kind: "action", operation: "confirm", message: "Publish the reviewed report." },
+    fields: [{ key: "confirmed", type: "boolean", required: true }],
+  }
+  const replies: unknown[] = []
+  await mockServer(page, {
+    forms: () => (replies.length ? [] : [form]),
+    onFormReply: (reply) => { replies.push(reply.body) },
+  })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const dock = page.locator('[data-component="session-elicitation-dock"]')
+  const confirm = dock.getByRole("button", { name: "Confirm", exact: true })
+  await expect(dock.getByText("Publish the reviewed report.")).toBeVisible()
+  await expect(dock.getByRole("button", { name: "Cancel", exact: true })).toBeVisible()
+  await expect(dock.getByRole("switch")).toHaveCount(0)
+  await confirm.press("Control+Enter")
+  await expect(confirm).toBeEnabled()
+  expect(replies).toEqual([])
+
+  await confirm.click()
+  await expect(dock).toHaveCount(0)
+  expect(replies).toEqual([{ answer: { confirmed: true } }])
+})
+
 test("shows a rejected Action answer beside its field and preserves a valid city", async ({ page }) => {
   const form = {
     id: "frm_flight_repair",
