@@ -12,6 +12,14 @@ const resource = {
         { definition: "tile/text", attributes: { text: "{!$attrs.dateOfTravel}", variant: "h2" } },
         {
           definition: "tile/column",
+          meta: { if: "{!$attrs.empty}" },
+          children: [
+            { definition: "tile/text", attributes: { text: "{!$attrs.originCity} → {!$attrs.destinationCity}" } },
+            { definition: "tile/text", attributes: { text: "{!$attrs.emptyLabel}", color: "muted" } },
+          ],
+        },
+        {
+          definition: "tile/column",
           meta: { forEach: "{!$attrs.flights}", forItem: "$flight" },
           children: [
             { definition: "tile/text", attributes: { text: "{!$flight.number}", variant: "h4" } },
@@ -40,7 +48,15 @@ const resource = {
   },
 } satisfies { type: "lightning__agentforceWidget"; contentBody: { widgetBody: Widget.Node } }
 
-export const flightWidgetResource = resource.contentBody.widgetBody
+const flightWidgetResource = resource.contentBody.widgetBody
+
+export function renderFlightWidget(attributes: Schema.JsonObject, emptyLabel: string) {
+  return Widget.render(FlightAction.widget, flightWidgetResource, {
+    ...attributes,
+    empty: Array.isArray(attributes.flights) && attributes.flights.length === 0,
+    emptyLabel,
+  })
+}
 
 type Registration = {
   widget: string
@@ -70,7 +86,12 @@ const registry: readonly Registration[] = [
   },
 ]
 
-export function renderActionWidget(widget: string | undefined, outputs: Schema.JsonObject, tool?: string) {
+export function renderActionWidget(
+  widget: string | undefined,
+  outputs: Schema.JsonObject,
+  tool?: string,
+  emptyFlightLabel = "",
+) {
   const entry = registry.find((registration) => registration.widget === widget)
   const known = registry.find((registration) => registration.tool === tool && Object.hasOwn(outputs, registration.output))
   const source = known ?? entry
@@ -86,7 +107,13 @@ export function renderActionWidget(widget: string | undefined, outputs: Schema.J
   if (!entry) return {}
 
   try {
-    return { tree: Widget.render(entry.widget, entry.resource, result.view.attributes), label: entry.label }
+    const attributes = result.view.attributes
+
+    const tree = entry.widget === FlightAction.widget
+      ? renderFlightWidget(attributes, emptyFlightLabel)
+      : Widget.render(entry.widget, entry.resource, attributes)
+
+    return { tree, label: entry.label }
   } catch (error) {
     if (!(error instanceof Widget.BindingError)) throw error
 

@@ -118,6 +118,8 @@ export function reschedule(view: View, operation: Widget.Operation | undefined) 
 }
 
 export function simulate(input: Input): Results {
+  if (input.dateOfTravel === "2026-12-04") return { ...input, flights: [] }
+
   return {
     ...input,
     flights: [

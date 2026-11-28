@@ -66,7 +66,7 @@ export function ActionResult(
   const widget = createMemo(() => {
     const item = result()
 
-    return item ? renderActionWidget(item.widget, item.outputs, props.tool) : undefined
+    return item ? renderActionWidget(item.widget, item.outputs, props.tool, i18n.t("ui.flightAction.empty")) : undefined
   })
 
   const widgetLabel = () => widget()?.label

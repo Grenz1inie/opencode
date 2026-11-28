@@ -130,6 +130,7 @@ const source = {
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
   "ui.flightAction.results": "Flight results",
+  "ui.flightAction.empty": "No flights found for this date.",
   "ui.flightAction.changeDate": "Change date",
   "ui.flightAction.unavailable": "This flight action is unavailable.",
   "ui.customerReviews.results": "Customer reviews",
