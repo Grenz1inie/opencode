@@ -139,14 +139,19 @@ export function simulate(input: Input, attempt?: Attempt): Results {
   }
 }
 
-const targets = { [definition.target]: simulate }
+type TargetRegistry = Readonly<Record<typeof definition.target, (input: Input, attempt?: Attempt) => unknown>>
+
+const targets: TargetRegistry = { "local://flight-search": simulate }
 const lightningTypes = { c__flightResults: Results }
 
-export function run(input: unknown, target: (input: Input) => unknown = targets[definition.target]) {
+export function run(
+  input: unknown,
+  { attempt, registry = targets }: { attempt?: Attempt; registry?: TargetRegistry } = {},
+) {
+  const query = Schema.decodeUnknownSync(Input)(input)
+  const target = registry[definition.target]
   const output = definition.outputs.results
-  const results = Schema.decodeUnknownSync(lightningTypes[output.complex_data_type_name])(
-    target(Schema.decodeUnknownSync(Input)(input)),
-  )
+  const results = Schema.decodeUnknownSync(lightningTypes[output.complex_data_type_name])(target(query, attempt))
   const projections = ActionOutput.project(definition.outputs, { results })
   const bound = bind(projections.user)
   return {

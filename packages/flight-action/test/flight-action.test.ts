@@ -38,10 +38,14 @@ test("uses a text field for missing cities and respects collection policy defaul
 
 test("executes the registered target once and binds its actual flight data", () => {
   const calls: unknown[] = []
-  const result = FlightAction.run(trip, (input) => {
-    calls.push(input)
-    const output = FlightAction.simulate(input)
-    return { ...output, flights: output.flights.map((flight) => ({ ...flight, fare: 612 })) }
+  const result = FlightAction.run(trip, {
+    registry: {
+      "local://flight-search"(input) {
+        calls.push(input)
+        const output = FlightAction.simulate(input)
+        return { ...output, flights: output.flights.map((flight) => ({ ...flight, fare: 612 })) }
+      },
+    },
   })
   expect(calls).toEqual([trip])
   expect(result.user?.attributes.flights.map((flight) => flight.fare)).toEqual([612, 612])
@@ -50,9 +54,13 @@ test("executes the registered target once and binds its actual flight data", () 
 
 test("opens a prefilled date request using the registered node and preserves the route", () => {
   const invoked: unknown[] = []
-  const execute = (input: unknown) => FlightAction.run(input, (query) => {
-    invoked.push(query)
-    return FlightAction.simulate(query)
+  const execute = (input: unknown) => FlightAction.run(input, {
+    registry: {
+      "local://flight-search"(query) {
+        invoked.push(query)
+        return FlightAction.simulate(query)
+      },
+    },
   })
   const missing = FlightAction.prepare({ originCity: "杭州", destinationCity: "成都" })
   expect(missing.fields.map((field) => field.key)).toEqual(["dateOfTravel"])
@@ -88,11 +96,16 @@ test("opens a prefilled date request using the registered node and preserves the
 test("an empty flight search can change date without re-running the original search", () => {
   const empty = { ...trip, dateOfTravel: "2026-12-04" }
   const calls: unknown[] = []
-  const search = (input: unknown) => FlightAction.run(input, (query) => {
-    calls.push(query)
-    return FlightAction.simulate(query, "search")
+  const execute = (input: unknown, attempt: FlightAction.Attempt) => FlightAction.run(input, {
+    attempt,
+    registry: {
+      "local://flight-search"(query, mode) {
+        calls.push(query)
+        return FlightAction.simulate(query, mode)
+      },
+    },
   })
-  const initial = search(empty)
+  const initial = execute(empty, "search")
 
   expect(initial.user?.attributes).toEqual({ ...empty, flights: [] })
   if (!initial.user) throw new Error("Expected an empty flight result")
@@ -102,7 +115,7 @@ test("an empty flight search can change date without re-running the original sea
   expect(calls).toEqual([empty])
 
   const dateOfTravel = "2026-12-06"
-  const revised = search({ ...change?.values, dateOfTravel })
+  const revised = execute({ ...change?.values, dateOfTravel }, "reschedule")
 
   expect(revised.user?.attributes.flights[0]?.fare).toBe(570)
   expect(calls).toEqual([empty, { ...trip, dateOfTravel }])
@@ -112,10 +125,10 @@ test("a failed search can recover on an explicit retry of the same query", () =>
   const unavailable = { ...trip, dateOfTravel: "2026-12-08" }
 
   expect(FlightAction.run(unavailable).user?.attributes.flights).toHaveLength(2)
-  expect(() => FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "search"))).toThrow("Flight search failed")
-  expect(() => FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "reschedule"))).toThrow("Flight search failed")
+  expect(() => FlightAction.run(unavailable, { attempt: "search" })).toThrow("Flight search failed")
+  expect(() => FlightAction.run(unavailable, { attempt: "reschedule" })).toThrow("Flight search failed")
 
-  const recovered = FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "retry"))
+  const recovered = FlightAction.run(unavailable, { attempt: "retry" })
 
   expect(recovered.user?.attributes).toMatchObject({
     ...unavailable,
@@ -136,8 +149,14 @@ test("reports a rejected named value separately from its Widget diagnostic", () 
 test("rejects an invalid date before calling the target and rejects invalid target output", () => {
   const calls: unknown[] = []
   expect(() =>
-    FlightAction.run({ ...trip, dateOfTravel: "2026-02-30" }, (input) => calls.push(input)),
+    FlightAction.run({ ...trip, dateOfTravel: "2026-02-30" }, {
+      registry: { "local://flight-search": (input) => calls.push(input) },
+    }),
   ).toThrow()
   expect(calls).toEqual([])
-  expect(() => FlightAction.run(trip, () => ({ ...trip, flights: [{ fare: "560" }] }))).toThrow()
+  expect(() =>
+    FlightAction.run(trip, {
+      registry: { "local://flight-search": () => ({ ...trip, flights: [{ fare: "560" }] }) },
+    }),
+  ).toThrow()
 })

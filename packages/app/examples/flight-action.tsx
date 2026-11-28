@@ -31,7 +31,7 @@ function Demo() {
     console.debug("Flight search target invoked", { ...query, attempt })
 
     try {
-      const view = FlightAction.run(query, (saved) => FlightAction.simulate(saved, attempt)).user
+      const view = FlightAction.run(query, { attempt }).user
       setResult(view ? { view } : { failure: query })
     } catch {
       setResult({ failure: query })
