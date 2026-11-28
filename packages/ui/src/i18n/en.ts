@@ -133,6 +133,7 @@ const source = {
   "ui.flightAction.empty": "No flights found for this date.",
   "ui.flightAction.failed": "Flight search failed",
   "ui.flightAction.retry": "Retry search",
+  "ui.flightAction.retryPermission": "Allow retrying this flight search?",
   "ui.flightAction.changeDate": "Change date",
   "ui.flightAction.unavailable": "This flight action is unavailable.",
   "ui.customerReviews.results": "Customer reviews",
