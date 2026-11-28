@@ -73,7 +73,7 @@ export type ToolFileSource = {
 export type FlightRescheduleHost = {
   get: (input: FlightReschedule.Card, signal: AbortSignal) => Promise<FlightReschedule.Result | null>
   change: (input: FlightReschedule.Change, signal: AbortSignal) => Promise<FlightReschedule.Result | null>
-  listen: (receive: (event: FlightReschedule.Changed) => void) => VoidFunction
+  listen: (receive: (event: FlightReschedule.Changed) => void, reconnect: () => void) => VoidFunction
 }
 
 export const {

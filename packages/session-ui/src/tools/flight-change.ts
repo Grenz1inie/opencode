@@ -10,38 +10,55 @@ function sameCard(left: FlightReschedule.Card, right: FlightReschedule.Card) {
 export function createFlightChange(card: () => FlightCard | undefined, unavailable: () => string) {
   const [state, setState] = createSignal(initial)
   const dispatch = (event: Parameters<typeof transition>[1]) => setState((current) => transition(current, event))
+  let activeRead: AbortController | undefined
+
+  const read = (target: FlightCard) => {
+    const current = state()
+
+    if (current.status === "absent" || current.target !== target) return
+
+    activeRead?.abort()
+
+    const controller = new AbortController()
+    const attempt = Symbol()
+
+    activeRead = controller
+    dispatch({ type: "read.start", target, attempt })
+
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)])
+
+    void Promise.try(() => target.host.get(target.card, signal)).then(
+      (result) => {
+        if (!controller.signal.aborted) dispatch({ type: "read", target, attempt, result })
+      },
+      () => {
+        if (!controller.signal.aborted)
+          dispatch({ type: "read", target, attempt, result: null, error: unavailable() })
+      },
+    )
+  }
 
   createEffect(on(card, (target) => {
     dispatch({ type: "bind", target })
 
     if (!target) return
 
-    const controller = new AbortController()
-
     const stop = target.host.listen((event) => {
-      if (sameCard(event.card, target.card)) dispatch({ type: "published", target, result: event.result })
-    })
+      if (sameCard(event.card, target.card)) read(target)
+    }, () => read(target))
 
     onCleanup(() => {
-      controller.abort()
+      activeRead?.abort()
       stop()
       dispatch({ type: "bind", target: undefined })
     })
-
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)])
-    void Promise.try(() => target.host.get(target.card, signal)).then(
-      (result) => dispatch({ type: "read", target, result }),
-      () => {
-        if (!controller.signal.aborted)
-          dispatch({ type: "read", target, result: null, error: unavailable() })
-      },
-    )
+    read(target)
   }))
 
   const run = (operation: Widget.Operation | undefined) => {
     const previous = state()
 
-    if (previous.status !== "ready") return
+    if (previous.status !== "ready" || presentation(previous).busy) return
 
     const target = previous.target
 
@@ -51,15 +68,22 @@ export function createFlightChange(card: () => FlightCard | undefined, unavailab
       return
     }
 
-    dispatch({ type: "start", target })
+    const attempt = Symbol()
+
+    dispatch({ type: "start", target, attempt })
     void Promise.try(() =>
       target.host.change(
         { card: target.card, operation, revision: previous.result?.revision ?? target.card.callID },
         AbortSignal.timeout(300_000),
       ),
     ).then(
-      (result) => dispatch({ type: "settled", target, result }),
-      () => dispatch({ type: "settled", target, result: null, error: unavailable() }),
+      (result) => {
+        // The mutation response can arrive after another tab saved a later revision.
+        if (result) read(target)
+
+        dispatch({ type: "settled", target, attempt })
+      },
+      () => dispatch({ type: "settled", target, attempt, error: unavailable() }),
     )
   }
 

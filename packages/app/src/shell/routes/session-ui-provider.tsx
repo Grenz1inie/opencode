@@ -255,8 +255,10 @@ export function SessionUIProvider(
         location: data.session.get(input.card.sessionID)?.location ?? { directory: directory() },
         signal,
       }),
-    listen: (receive) =>
+    listen: (receive, reconnect) =>
       serverSDK.event.listen((event) => {
+        if (event.type === "server.connected") return reconnect()
+
         if (event.type !== "rpc.opencode.flight-reschedule.changed") return
         const changed = Option.getOrUndefined(decodeFlightChange(event.data))
 
