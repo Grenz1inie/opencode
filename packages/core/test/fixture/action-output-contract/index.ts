@@ -35,6 +35,7 @@ const target: Target = (input, context) =>
         output: outputs.forModel,
         actionOutput: { outputs },
         actionDiagnostic: { stage: "widget", path: outputs.forModel },
+        flightFailure: { originCity: outputs.forModel },
       })
       return yield* new Tool.Error({ message: outputs.forModel, metadata: { actionOutput: { outputs } } })
     }

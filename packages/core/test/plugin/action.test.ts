@@ -480,12 +480,17 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
 
     yield* plugins.activate([
       extension("invalid-action-catalog", {
-        types: { ...types, counts: Schema.Record(Schema.String, Schema.Number) },
+        types: {
+          ...types,
+          counts: Schema.Record(Schema.String, Schema.Number),
+          failingCodec: Schema.String.check(Schema.makeFilter(() => { throw new Error("PRIVATE_CODEC_VALUE") })),
+        },
         targets: {
           [definition.target]: (input) =>
             Effect.sync(() => {
               received.push(input)
               if (input.sampleID === "record") return { receipt: { PRIVATE_RECORD_KEY: "invalid count" } }
+              if (input.sampleID === "codec") return { receipt: "encoded" }
               return { receipt: { marker: 123 }, undeclared: "SECRET" }
             }),
         },
@@ -495,6 +500,7 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
           { ...definition, name: "missing_type", inputs: { sampleID: { type: "unknown" } } },
           { ...definition, name: "missing_output_type", outputs: { receipt: { type: "unknown" } } },
           { ...definition, name: "dynamic_record", outputs: { receipt: { type: "counts" } } },
+          { ...definition, name: "throwing_codec", outputs: { receipt: { type: "failingCodec" } } },
           definition,
         ],
       }),
@@ -514,6 +520,9 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
     const recordError = yield* execute(snapshot, { sampleID: "record" }, "dynamic_record").pipe(Effect.flip)
     expect(recordError.metadata?.actionDiagnostic).toEqual({ stage: "actionSchema", path: "outputs.receipt" })
     expect(recordError.message).not.toContain("PRIVATE_RECORD_KEY")
+
+    const defect = yield* execute(snapshot, { sampleID: "codec" }, "throwing_codec").pipe(Effect.catchDefect(Effect.succeed))
+    expect(defect).toMatchObject({ message: 'Action "throwing_codec" returned invalid outputs at outputs' })
   }),
 )
 

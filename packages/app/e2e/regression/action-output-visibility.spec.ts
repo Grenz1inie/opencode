@@ -243,7 +243,7 @@ test("keeps an extension Action's empty result, rendered fallback, and execution
   })
 
   async function assertResults() {
-    await expect(part("empty").getByRole("status")).toHaveText("No results")
+    await expect(part("empty").getByRole("status")).toHaveText("No list items")
     await expect(part("fallback").getByRole("status"))
       .toHaveText("Widget output could not be displayed (archive/detail · $.attributes.text).")
     await expect(part("fallback").locator("pre")).toHaveText(JSON.stringify({ entries: ["ARCHIVE_FALLBACK"] }, null, 2))

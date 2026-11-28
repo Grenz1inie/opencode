@@ -74,6 +74,10 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
     message: `Action "${definition.name}" failed at target`,
     metadata: { actionDiagnostic: { stage: "actionResult", path: "target" } },
   })
+  const invalidOutputs = (path: string) => new Tool.Error({
+    message: `Action "${definition.name}" returned invalid outputs at ${path}`,
+    metadata: { actionDiagnostic: { stage: "actionSchema", path } },
+  })
 
   const requireAvailable = (context: Tool.RequestContext) =>
     available
@@ -130,9 +134,8 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
 
         const targetContext: Tool.Context = {
           ...context,
-          // Progress can survive in failed tool parts. Only the host publishes Action result fields.
-          progress: ({ actionOutput: _output, actionDiagnostic: _diagnostic, output: _text, ...metadata }) =>
-            context.progress({ ...metadata, actionOutput: { outputs: {} } }),
+          // Progress can survive in failed tool parts. Publish the running state without target data.
+          progress: () => context.progress({ actionOutput: { outputs: {} } }),
         }
         const raw = yield* Effect.suspend(() => target(bound ? { ...values, ...bound } : values, targetContext)).pipe(
           Effect.mapError(targetFailure),
@@ -143,13 +146,8 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
           ),
         )
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(
-          Effect.mapError(({ issue }) => {
-            const path = outputIssuePath(output.ast, firstIssuePath(issue))
-            return new Tool.Error({
-              message: `Action "${definition.name}" returned invalid outputs at ${path}`,
-              metadata: { actionDiagnostic: { stage: "actionSchema", path } },
-            })
-          }),
+          Effect.mapError(({ issue }) => invalidOutputs(outputIssuePath(output.ast, firstIssuePath(issue)))),
+          Effect.catchDefect(() => Effect.die(invalidOutputs("outputs"))),
         )
         const projections = ActionOutput.project(definition.outputs, value)
         return { ...ActionOutput.result(projections, presentation.view, presentation.diagnostic), output: projections.model }
@@ -178,7 +176,7 @@ function declaredMember(ast: SchemaAST.AST, key: PropertyKey): SchemaAST.AST | u
 function outputIssuePath(ast: SchemaAST.AST, segments: readonly PropertyKey[]) {
   let path = "outputs"
   for (const segment of segments) {
-    const member = declaredMember(ast, segment)
+    const member = declaredMember(ast, segment) ?? declaredMember(SchemaAST.toEncoded(ast), segment)
     // Keys from a returned record can themselves be output data.
     if (!member) break
     path += typeof segment === "number" ? `[${segment}]` : "." + String(segment)

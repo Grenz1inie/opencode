@@ -139,7 +139,7 @@ const source = {
   "ui.customerReviews.results": "Customer reviews",
   "ui.actionOutput.pending": "Action in progress…",
   "ui.actionOutput.completed": "Action completed",
-  "ui.actionOutput.empty": "No results",
+  "ui.actionOutput.empty": "No list items",
   "ui.actionOutput.failed": "Action failed or was cancelled",
   "ui.actionOutput.details": "Output details",
   "ui.actionOutput.invalid": "Widget output could not be displayed ({{path}}).",

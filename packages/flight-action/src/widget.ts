@@ -63,11 +63,18 @@ export function bind(expression: string, scope: Scope) {
 }
 
 export function render(resource: string, node: Node, attributes: Scope): Rendered {
-  const elements = expand(resource, node, { $attrs: attributes }, "$")
+  const elements = expand(resource, prepare(resource, node, "$"), { $attrs: attributes })
   return elements[0] ?? { definition: "tile/widget", attributes: undefined, repeated: false, children: [] }
 }
 
-function expand(resource: string, node: Node, scope: Scope, path: string): Rendered[] {
+type Prepared = {
+  node: Node
+  path: string
+  clickDefinition: string | undefined
+  children: readonly Prepared[]
+}
+
+function prepare(resource: string, node: Node, path: string): Prepared {
   const keys = Object.hasOwn(textAttributes, node.definition) ? textAttributes[node.definition] : undefined
   if (!keys) throw new BindingError(resource, path + ".definition", "Unsupported tile")
 
@@ -83,6 +90,12 @@ function expand(resource: string, node: Node, scope: Scope, path: string): Rende
       if (value !== undefined && typeof value !== "string") throw new BindingError(resource, attribute, "Expected a string")
     }
   }
+
+  const children = (node.children ?? []).map((child, index) => prepare(resource, child, `${path}.children[${index}]`))
+  return { node, path, clickDefinition, children }
+}
+
+function expand(resource: string, { node, path, clickDefinition, children }: Prepared, scope: Scope): Rendered[] {
   const scopes = node.meta?.forEach === undefined
     ? [scope]
     : (() => {
@@ -104,7 +117,7 @@ function expand(resource: string, node: Node, scope: Scope, path: string): Rende
       text: typeof text === "string" ? interpolate(resource, path + ".attributes.text", text, current) : undefined,
       ...(clickDefinition === undefined ? {} : { clickDefinition }),
       repeated: node.meta?.forEach !== undefined,
-      children: (node.children ?? []).flatMap((child, index) => expand(resource, child, current, `${path}.children[${index}]`)),
+      children: children.flatMap((child) => expand(resource, child, current)),
     }]
   })
 }
