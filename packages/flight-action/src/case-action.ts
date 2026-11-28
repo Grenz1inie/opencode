@@ -66,31 +66,39 @@ export const isEditor = Schema.is(Schema.Struct({
 
 export function prepare(draft: Draft) {
   const plan = LightningEditor.resolve(bundle, channel, "case_data", [localEditor])
-  if (plan.kind !== "registered") return plan
+  if (plan.kind === "unavailable") return plan
 
-  const selected = choices.find((item) => item.value === draft.case_data?.priority)
-
-  return {
-    ...plan,
-    fields: [
-      { ...localEditor.fields[0], default: draft.case_data?.subject },
-      { ...localEditor.fields[1], default: selected?.value },
-      { ...localEditor.fields[2], default: draft.case_data?.description },
-    ] as const,
+  const defaults = new Map([
+    [subject, draft.case_data?.subject],
+    [priority, draft.case_data?.priority],
+    [description, draft.case_data?.description],
+  ])
+  const prefill = (field: LightningEditor.Field) => {
+    const value = defaults.get(field.key)
+    if (value === undefined || (field.options && !field.options.some((item) => item.value === value))) return field
+    return { ...field, default: value }
   }
+  const [first, ...rest] = plan.fields
+  return { ...plan, fields: [prefill(first), ...rest.map(prefill)] as const }
 }
 
 const parseInput = Schema.decodeUnknownSync(Input, { onExcessProperty: "error" })
+const parseAnswer = Schema.decodeUnknownSync(Schema.Struct({
+  [subject]: LightningEditor.NonblankText,
+  [priority]: Schema.optionalKey(Schema.String),
+  [description]: Schema.optionalKey(Schema.String),
+}), { onExcessProperty: "error" })
 type FlatAnswer = Readonly<Record<string, unknown>>
 
 export function fromAnswer(answer: FlatAnswer) {
-  return parseInput({
+  const fields = parseAnswer(answer)
+  return {
     case_data: {
-      subject: answer[subject],
-      ...(Object.hasOwn(answer, priority) ? { priority: answer[priority] } : {}),
-      ...(Object.hasOwn(answer, description) ? { description: answer[description] } : {}),
+      subject: fields[subject],
+      ...(fields[priority] !== undefined ? { priority: fields[priority] } : {}),
+      ...(fields[description] !== undefined ? { description: fields[description] } : {}),
     },
-  })
+  }
 }
 
 export function simulate(input: Input) {

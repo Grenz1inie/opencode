@@ -27,6 +27,7 @@ test("selects the pinned editor and maps its flat answers to one named case_data
 
   expect(() => CaseAction.run(CaseAction.fromAnswer(flat), target)).toThrow()
   expect(() => CaseAction.run(CaseAction.fromAnswer({ ...flat, "case_data.subject": "  " }), target)).toThrow()
+  expect(() => CaseAction.fromAnswer({ ...flat, "case_data.subject": "Delivery", "case_data.extra": "data" })).toThrow()
   expect(calls).toHaveLength(0)
 
   CaseAction.run(CaseAction.fromAnswer({ ...flat, "case_data.subject": "  Delivery question  " }), target)

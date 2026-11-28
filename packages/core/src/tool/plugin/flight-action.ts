@@ -213,6 +213,7 @@ export const Plugin = {
                   fields: plan.fields,
                   metadata: {
                     kind: "action",
+                    action: CaseAction.action.name,
                     ...(plan.kind === "registered" ? { editor: plan.editor } : {}),
                     tool: { messageID: context.messageID, id: context.id },
                   },
