@@ -175,3 +175,32 @@ test("keeps a valid empty Pronto MCP card distinct from failed Invocable results
     .toContainText("$.structuredContent.outputValues.reviews")
   await expect(page.getByText("Private server response")).toHaveCount(0)
 })
+
+test("renders an extension's declarative Action result using existing tiles", async ({ page }) => {
+  const output = {
+    widget: "sample/result",
+    outputs: { receipt: { reference: "SAMPLE-22" } },
+    view: {
+      label: "Sample result",
+      body: {
+        definition: "tile/widget",
+        children: [{ definition: "tile/text", attributes: { text: "Sample {!$attrs.receipt.reference}", variant: "h2" } }],
+      },
+    },
+  }
+
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart("prt_extension_action", "read_sample_reference", "completed", {}, {
+          output: "MODEL_ONLY_FIXTURE",
+          metadata: { actionOutput: output },
+        }),
+      ]),
+    ],
+  })
+  const card = page.getByRole("region", { name: "Sample result" })
+  await expect(card.getByRole("heading", { name: "Sample SAMPLE-22", exact: true })).toBeVisible()
+  await expect(page.getByText("MODEL_ONLY_FIXTURE", { exact: true })).toHaveCount(0)
+})

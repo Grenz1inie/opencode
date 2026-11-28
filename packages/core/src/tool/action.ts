@@ -42,6 +42,13 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
 
   const input = yield* fields(catalog, "inputs", definition.inputs)
   const output = yield* fields(catalog, "outputs", definition.outputs)
+  const widget = definition.widget
+  const widgets = catalog.widgets ?? {}
+  const view = widget === undefined
+    ? undefined
+    : yield* Schema.decodeUnknownEffect(ActionOutput.View)(Object.hasOwn(widgets, widget) ? widgets[widget] : undefined).pipe(
+        Effect.mapError((error) => new Tool.Error({ message: `Invalid widget "${widget}" at widget: ${error.message}` })),
+      )
   const action = normalizedName(definition)
 
   return {
@@ -56,7 +63,7 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(
           Effect.mapError(() => new Tool.Error({ message: `Action "${definition.name}" returned invalid outputs` })),
         )
-        return ActionOutput.result(ActionOutput.project(definition.outputs, value))
+        return ActionOutput.result(ActionOutput.project(definition.outputs, value), widget, view)
       }),
   }
 })

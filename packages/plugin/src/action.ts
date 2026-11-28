@@ -8,6 +8,7 @@ export interface Definition {
   readonly name: string
   readonly description: string
   readonly target: string
+  readonly widget?: string
   readonly inputs: Readonly<Record<string, Field & { readonly is_required?: boolean }>>
   readonly outputs: Readonly<
     Record<string, Field & { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }>
@@ -20,6 +21,7 @@ export interface Catalog {
   readonly actions: readonly Definition[]
   readonly targets: Readonly<Record<string, Target>>
   readonly types: Readonly<Record<string, Schema.Codec<Schema.Json, Schema.Json>>>
+  readonly widgets?: Readonly<Record<string, { readonly label: string; readonly body: Schema.JsonObject }>>
 }
 
 export interface ExperimentalActionDomain {

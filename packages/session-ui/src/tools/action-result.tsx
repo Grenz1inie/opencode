@@ -42,7 +42,7 @@ export function ActionResult(
 
     if (
       !host || !data.flag("flight_action") || !sessionID || !props.messageID || !props.callID ||
-      props.tool !== FlightAction.definition.name || (props.status !== "completed" && !flightFailure())
+      current?.view || props.tool !== FlightAction.definition.name || (props.status !== "completed" && !flightFailure())
     ) return
 
     const view = current?.widget === FlightAction.widget ? FlightAction.bind(current.outputs).view : legacy()
@@ -58,7 +58,7 @@ export function ActionResult(
     return revised ? Option.getOrUndefined(readFlightFailure(revised.failure)) : flightFailure()
   })
 
-  const result = createMemo(() => {
+  const result = createMemo<ActionOutput.Presentation | undefined>(() => {
     const revised = change.view().result
 
     if (!revised) return initial()
@@ -82,10 +82,12 @@ export function ActionResult(
   const widget = createMemo(() => {
     const item = result()
 
-    return item ? renderActionWidget(item.widget, item.outputs, props.tool, i18n.t("ui.flightAction.empty")) : undefined
+    return item
+      ? renderActionWidget(item.widget, item.outputs, props.tool, i18n.t("ui.flightAction.empty"), item.view)
+      : undefined
   })
 
-  const widgetLabel = () => widget()?.label
+  const widgetLabel = () => widget()?.title ?? i18n.t(widget()?.label ?? "ui.actionOutput.completed")
   const failure = createMemo(() => Option.getOrUndefined(readDiagnostic(props.metadata.actionDiagnostic)))
 
   const output = createMemo(() => {
@@ -138,7 +140,7 @@ export function ActionResult(
         <Match when={true}>
           <Switch fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>
             <Match when={widget()?.tree}>
-              {(tree) => <ActionWidget tree={tree()} label={i18n.t(widgetLabel() ?? "ui.actionOutput.completed")} actions={actions()} />}
+              {(tree) => <ActionWidget tree={tree()} label={widgetLabel()} actions={actions()} />}
             </Match>
             <Match when={legacy()}>
               {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} actions={actions()} />}

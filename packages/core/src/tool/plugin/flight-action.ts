@@ -34,7 +34,7 @@ const readFailure = Schema.decodeUnknownOption(FlightAction.Input)
 function firstOutputs(metadata: Schema.JsonObject | undefined) {
   if (metadata && Object.hasOwn(metadata, "actionOutput")) {
     const presentation = Option.getOrUndefined(readPresentation(metadata.actionOutput))
-    return presentation?.widget === FlightAction.widget ? presentation.outputs : undefined
+    return presentation?.widget === FlightAction.widget && !presentation.view ? presentation.outputs : undefined
   }
 
   const legacy = Option.getOrUndefined(readView(metadata?.flightAction))
