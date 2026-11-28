@@ -11,6 +11,28 @@
     "sha256": "2176b0c4ee79328fb7d9c65f9a9d8a5e37154e67f4365df85dc2643da398cab5"
   },
   {
+    "path": "pronto/lightningTypes/customerReviews/renderer.json",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/lightningTypes/customerReviews/renderer.json",
+    "git_blob": "e0da0d11b68cf95a19cf80c6627361ce89e09405",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/lightningTypes/customerReviews/renderer.json",
+    "license": "Apache-2.0",
+    "bytes": 368,
+    "sha256": "419b5fc8e4962d1bf9fa01b16c98180c00805804ae946ea9c64b8b13a435b8cd"
+  },
+  {
+    "path": "pronto/lightningTypes/customerReviews/schema.json",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/lightningTypes/customerReviews/schema.json",
+    "git_blob": "95fd21a33bfdbb0bd09e33f0b0e3e4623e751f89",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/lightningTypes/customerReviews/schema.json",
+    "license": "Apache-2.0",
+    "bytes": 592,
+    "sha256": "c4200f77f68f5f840a5b92a267e3f17fc7c8ba9bd812c63fb63b8bbde5aa2044"
+  },
+  {
     "path": "pronto/lightningTypes/customerReviewsOutput/renderer.json",
     "repo": "trailheadapps/pronto",
     "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
@@ -31,6 +53,17 @@
     "license": "Apache-2.0",
     "bytes": 236,
     "sha256": "56225575711f09145f27220bda571ae507482860e3bd0c9bcb5f38ee58b0a76d"
+  },
+  {
+    "path": "pronto/lightningTypes/customerReviewsResponse/schema.json",
+    "repo": "trailheadapps/pronto",
+    "commit": "220badaa00e0746b56839abab61bf2eaa5f03805",
+    "source": "src-base/main/default/lightningTypes/customerReviewsResponse/schema.json",
+    "git_blob": "09c9baa566480563272b215bf4f73e2d53ce0a21",
+    "url": "https://github.com/trailheadapps/pronto/blob/220badaa00e0746b56839abab61bf2eaa5f03805/src-base/main/default/lightningTypes/customerReviewsResponse/schema.json",
+    "license": "Apache-2.0",
+    "bytes": 685,
+    "sha256": "9d7c6dad52ec16b0207ea51915cbd24ad10a6db256fa8de691b159fb965f417e"
   },
   {
     "path": "pronto/uiWidgets/customerReviews/customerReviews.json",
