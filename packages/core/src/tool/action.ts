@@ -137,9 +137,9 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
         const raw = yield* Effect.suspend(() => target(bound ? { ...values, ...bound } : values, targetContext)).pipe(
           Effect.mapError(targetFailure),
           Effect.catchDefect((cause) =>
-            cause instanceof Form.CancelledError || cause instanceof Permission.DeclinedError
-              ? Effect.die(cause)
-              : targetFailure(),
+            Effect.die(
+              cause instanceof Form.CancelledError || cause instanceof Permission.DeclinedError ? cause : targetFailure(),
+            ),
           ),
         )
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(

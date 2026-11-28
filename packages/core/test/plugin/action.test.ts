@@ -582,11 +582,12 @@ it.live("keeps the four named output combinations independent of the renderer an
       expect(fallback.metadata?.actionOutput).not.toHaveProperty("view")
     }
 
-    for (const sampleID of ["fail", "defect"]) {
-      const failure = yield* execute(snapshot, { sampleID }).pipe(Effect.flip)
-      expect(failure.message).toBe('Action "inspect_sample" failed at target')
-      expect(failure.metadata).toEqual({ actionDiagnostic: { stage: "actionResult", path: "target" } })
-    }
+    const failure = yield* execute(snapshot, { sampleID: "fail" }).pipe(Effect.flip)
+    expect(failure.message).toBe('Action "inspect_sample" failed at target')
+    expect(failure.metadata).toEqual({ actionDiagnostic: { stage: "actionResult", path: "target" } })
+
+    const defect = yield* execute(snapshot, { sampleID: "defect" }).pipe(Effect.catchDefect(Effect.succeed))
+    expect(defect).toMatchObject({ message: 'Action "inspect_sample" failed at target' })
   }),
 )
 

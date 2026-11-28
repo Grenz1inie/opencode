@@ -10,6 +10,7 @@ export type Rendered = {
   id?: string
   attributes: Node["attributes"]
   text?: string
+  clickDefinition?: string
   repeated: boolean
   children: readonly Rendered[]
 }
@@ -38,10 +39,8 @@ const click = Schema.decodeUnknownOption(
 )
 
 export function operation(widget: string, node: Rendered): Operation | undefined {
-  if (node.definition !== "tile/button" || !node.id) return
-  const actions = Option.getOrUndefined(click(node.attributes?.actions))?.click
-  if (actions?.length !== 1 || !actions[0]) return
-  return { widget, node: node.id, definition: actions[0].definition }
+  if (node.definition !== "tile/button" || !node.id || node.clickDefinition === undefined) return
+  return { widget, node: node.id, definition: node.clickDefinition }
 }
 
 export class BindingError extends Error {
@@ -71,10 +70,14 @@ export function render(resource: string, node: Node, attributes: Scope): Rendere
 function expand(resource: string, node: Node, scope: Scope, path: string): Rendered[] {
   const keys = Object.hasOwn(textAttributes, node.definition) ? textAttributes[node.definition] : undefined
   if (!keys) throw new BindingError(resource, path + ".definition", "Unsupported tile")
+
+  let clickDefinition: string | undefined
   for (const [key, value] of Object.entries(node.attributes ?? {})) {
     const attribute = path + ".attributes." + key
     if (node.definition === "tile/button" && key === "actions") {
-      if (Option.isNone(click(value))) throw new BindingError(resource, attribute, "Invalid button actions")
+      const actions = Option.getOrUndefined(click(value))?.click
+      if (!actions) throw new BindingError(resource, attribute, "Invalid button actions")
+      if (actions.length === 1) clickDefinition = actions[0]?.definition
     } else {
       if (!keys.includes(key)) throw new BindingError(resource, attribute, "Unsupported attribute")
       if (value !== undefined && typeof value !== "string") throw new BindingError(resource, attribute, "Expected a string")
@@ -99,6 +102,7 @@ function expand(resource: string, node: Node, scope: Scope, path: string): Rende
       ...(node.id ? { id: node.id } : {}),
       attributes: node.attributes,
       text: typeof text === "string" ? interpolate(resource, path + ".attributes.text", text, current) : undefined,
+      ...(clickDefinition === undefined ? {} : { clickDefinition }),
       repeated: node.meta?.forEach !== undefined,
       children: (node.children ?? []).flatMap((child, index) => expand(resource, child, current, `${path}.children[${index}]`)),
     }]
