@@ -28,7 +28,7 @@ const Flight = Schema.Struct({
   duration: Schema.String,
   fare: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
 })
-const Results = Schema.Struct({ ...Input.fields, flights: Schema.Array(Flight) })
+export const Results = Schema.Struct({ ...Input.fields, flights: Schema.Array(Flight) })
 type Results = typeof Results.Type
 
 export const definition = {
@@ -148,7 +148,10 @@ const decodeResults = Schema.decodeUnknownResult(Results)
 const decodeView = Schema.decodeUnknownResult(View)
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
-export function bind(outputs: Schema.JsonObject): ActionOutput.Binding<View> {
+export function bind(
+  outputs: Schema.JsonObject,
+  attributes: Readonly<Record<string, string>> = override.attributes,
+): ActionOutput.Binding<View> {
   if (!Object.hasOwn(outputs, "results")) return { path: "$.outputs.results" }
 
   const results = decodeResults(outputs.results)
@@ -160,10 +163,12 @@ export function bind(outputs: Schema.JsonObject): ActionOutput.Binding<View> {
     }
   }
 
-  const attributes = Object.fromEntries(
-    Object.entries(override.attributes).map(([name, expression]) => [name, readBinding(expression, { $attrs: results.success })]),
+  const bound = Object.fromEntries(
+    Object.entries({ ...override.attributes, ...attributes }).map(([name, expression]) =>
+      [name, readBinding(expression, { $attrs: results.success })],
+    ),
   )
-  const decoded = decodeView({ definition: widget, attributes })
+  const decoded = decodeView({ definition: widget, attributes: bound })
   if (decoded._tag === "Success") return { view: decoded.success }
   const path = formatIssues(decoded.failure.issue).issues[0]?.path
   return { path: "$" + (path?.length ? "." + path.map(String).join(".") : ".attributes") }
