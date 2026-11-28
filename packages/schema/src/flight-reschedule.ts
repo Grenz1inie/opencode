@@ -13,6 +13,7 @@ export type Card = typeof Card.Type
 export const Result = Schema.Struct({
   revision: Schema.String,
   outputs: Schema.JsonObject,
+  failure: Schema.optionalKey(Schema.JsonObject),
 })
 export type Result = typeof Result.Type
 

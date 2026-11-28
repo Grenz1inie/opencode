@@ -68,11 +68,34 @@ test("a delayed change response cannot invalidate the reconnect read or replace 
   const read = Symbol()
   const changing = transition(ready, { type: "start", target, attempt: change })
   const reconnect = transition(changing, { type: "read.start", target, attempt: read })
-  const settled = transition(reconnect, { type: "settled", target, attempt: change })
+  const settled = transition(reconnect, { type: "settled", target, attempt: change, result: revised })
   const recovered = transition(settled, { type: "read", target, attempt: read, result: newest })
 
   expect(presentation(settled)).toMatchObject({ busy: true })
   expect(presentation(recovered)).toMatchObject({ busy: false, result: newest })
+})
+
+test("keeps the acknowledged revision when reloading the stored result fails", () => {
+  const previous = { ...revised, failure: { originCity: "杭州", destinationCity: "成都", dateOfTravel: "2026-12-08" } }
+  const change = Symbol()
+  const read = Symbol()
+  const changing = transition(loaded(previous), { type: "start", target, attempt: change })
+  const pending = transition(changing, { type: "read.start", target, attempt: read })
+  const settled = transition(pending, { type: "settled", target, attempt: change, result: newest, baseRevision: previous.revision })
+  const unavailable = transition(settled, { type: "read", target, attempt: read, result: null, error: "Unavailable" })
+
+  expect(presentation(unavailable)).toMatchObject({ busy: false, result: newest, error: "Unavailable" })
+})
+
+test("ignores an acknowledged revision if a newer one has already been read", () => {
+  const change = Symbol()
+  const read = Symbol()
+  const changing = transition(loaded(null), { type: "start", target, attempt: change })
+  const pending = transition(changing, { type: "read.start", target, attempt: read })
+  const recovered = transition(pending, { type: "read", target, attempt: read, result: newest })
+  const settled = transition(recovered, { type: "settled", target, attempt: change, result: revised })
+
+  expect(presentation(settled)).toMatchObject({ busy: false, result: newest })
 })
 
 test("ignores a read from a previous card or session", () => {

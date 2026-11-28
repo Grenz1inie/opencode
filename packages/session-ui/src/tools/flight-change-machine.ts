@@ -5,7 +5,7 @@ import type { FlightRescheduleHost } from "../context"
 export type FlightCard = {
   card: FlightReschedule.Card
   host: FlightRescheduleHost
-  view: FlightAction.View
+  view?: FlightAction.View
 }
 
 type Result = FlightReschedule.Result | null
@@ -23,7 +23,7 @@ type Event =
   | { type: "read.start"; target: FlightCard; attempt: symbol }
   | { type: "read"; target: FlightCard; attempt: symbol; result: Result; error?: string }
   | { type: "start"; target: FlightCard; attempt: symbol }
-  | { type: "settled"; target: FlightCard; attempt: symbol; error?: string }
+  | { type: "settled"; target: FlightCard; attempt: symbol; result?: Result; baseRevision?: string; error?: string }
   | { type: "invalid"; target: FlightCard; error: string }
 
 export const initial: State = { status: "absent" }
@@ -58,7 +58,7 @@ export function transition(state: State, event: Event): State {
       return {
         status: "ready",
         target: state.target,
-        result: state.result,
+        result: state.result?.revision === event.baseRevision ? (event.result ?? state.result) : state.result,
         readAttempt: state.readAttempt,
         error: event.error,
       }

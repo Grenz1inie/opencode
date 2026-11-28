@@ -90,7 +90,7 @@ test("an empty flight search can change date without re-running the original sea
   const calls: unknown[] = []
   const search = (input: unknown) => FlightAction.run(input, (query) => {
     calls.push(query)
-    return FlightAction.simulate(query)
+    return FlightAction.simulate(query, "search")
   })
   const initial = search(empty)
 
@@ -106,6 +106,21 @@ test("an empty flight search can change date without re-running the original sea
 
   expect(revised.user?.attributes.flights[0]?.fare).toBe(570)
   expect(calls).toEqual([empty, { ...trip, dateOfTravel }])
+})
+
+test("a failed search can recover on an explicit retry of the same query", () => {
+  const unavailable = { ...trip, dateOfTravel: "2026-12-08" }
+
+  expect(FlightAction.run(unavailable).user?.attributes.flights).toHaveLength(2)
+  expect(() => FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "search"))).toThrow("Flight search failed")
+  expect(() => FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "reschedule"))).toThrow("Flight search failed")
+
+  const recovered = FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "retry"))
+
+  expect(recovered.user?.attributes).toMatchObject({
+    ...unavailable,
+    flights: [{ number: "CA 1741", fare: 560 }, { number: "MU 5495", fare: 620 }],
+  })
 })
 
 test("reports a rejected named value separately from its Widget diagnostic", () => {

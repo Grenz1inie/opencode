@@ -1,3 +1,4 @@
+import { FlightAction } from "@opencode/flight-action"
 import { Option, Schema } from "effect"
 import { For, Show } from "solid-js"
 import type { PermissionRequest } from "@opencode/client/promise"
@@ -16,7 +17,10 @@ export function SessionPermissionDock(props: {
   onDecide: (response: "once" | "always" | "reject") => void
 }) {
   const language = useLanguage()
-  const reschedule = () => props.request.metadata?.operation === "reschedule"
+
+  const cancellable = () =>
+    props.request.metadata?.operation === "reschedule" ||
+    (props.request.action === FlightAction.definition.name && props.request.metadata?.operation === "retry")
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.action}.description`
@@ -39,7 +43,7 @@ export function SessionPermissionDock(props: {
     <DockPrompt
       kind="permission"
       onKeyDown={(event) => {
-        if (!reschedule() || props.responding || event.key !== "Escape") return
+        if (!cancellable() || props.responding || event.key !== "Escape") return
 
         event.preventDefault()
         event.stopPropagation()
@@ -61,7 +65,7 @@ export function SessionPermissionDock(props: {
               variant="ghost"
               size="normal"
               ref={(button: HTMLButtonElement) => {
-                if (reschedule()) queueMicrotask(() => button.focus({ preventScroll: true }))
+                if (cancellable()) queueMicrotask(() => button.focus({ preventScroll: true }))
               }}
               onClick={() => props.onDecide("reject")}
               disabled={props.responding}
