@@ -34,10 +34,10 @@ import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { Form } from "../form.js"
 import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
-import { FlightActionTool } from "../tool/plugin/flight-action.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
 import { SessionAffinity } from "./affinity.js"
@@ -66,7 +66,7 @@ const WINDOW_HEADROOM = 0.01
 const OUTPUT_TOKEN_MIN = 1_024
 
 /** Tool errors, plus the user declining a permission or dismissing a question. */
-export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError | FlightActionTool.CancelledError
+export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError | Form.CancelledError
 
 export interface Prepared<Event = SessionRequest> {
   readonly event: Event
@@ -444,10 +444,10 @@ export const layer = Layer.effect(
                 const decline = cause.reasons
                   .map((r) => (Cause.isDieReason(r) ? r.defect : Cause.isFailReason(r) ? r.error.error : undefined))
                   .find(
-                    (value): value is Permission.DeclinedError | QuestionTool.CancelledError | FlightActionTool.CancelledError =>
+                    (value): value is Exclude<ExecuteError, Tool.Error> =>
                       value instanceof Permission.DeclinedError ||
                       value instanceof QuestionTool.CancelledError ||
-                      value instanceof FlightActionTool.CancelledError,
+                      value instanceof Form.CancelledError,
                   )
                 return decline ? Result.succeed(decline) : Result.fail(cause)
               },

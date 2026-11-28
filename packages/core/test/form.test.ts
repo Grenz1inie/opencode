@@ -371,6 +371,31 @@ describe("Form", () => {
     }),
   )
 
+  it.effect("can cancel a form while a reply is being validated", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let accepted = false
+      yield* service.create({
+        ...input,
+        validate: () => Deferred.succeed(entered, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.as(Effect.sync(() => { accepted = true })),
+        ),
+      })
+
+      const reply = yield* service.reply({ id: formID, answer: { name: "Ava" } }).pipe(Effect.flip, Effect.forkChild)
+      yield* Deferred.await(entered)
+      yield* service.cancel(formID)
+      yield* Deferred.succeed(release, undefined)
+
+      expect((yield* Fiber.join(reply))._tag).toBe("Form.AlreadySettledError")
+      expect(yield* service.state(formID)).toEqual({ status: "cancelled" })
+      expect(accepted).toBe(false)
+    }),
+  )
+
   it.effect("keeps forms pending when reply event publication fails", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

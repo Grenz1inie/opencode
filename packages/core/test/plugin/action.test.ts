@@ -1,12 +1,15 @@
 import { expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
 import { Flag } from "@opencode/core/flag"
+import { Form } from "@opencode/core/form"
 import { Plugin } from "@opencode/core/plugin"
 import { Tool } from "@opencode/core/tool"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
-import { Effect, Layer, Schema } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { bookingEditor, bookingType } from "../fixture/action-input"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -52,6 +55,208 @@ const execute = (tools: Tool.Snapshot, input: unknown, name = definition.name) =
     messageID: SessionMessage.ID.make("msg_action"),
     call: { type: "tool-call", id: "call_action", name, input },
   })
+
+const openForm = <A, E>(invocation: Effect.Effect<A, E>) =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const created = yield* Deferred.make<Form.Info>()
+    const unsubscribe = yield* bus.listen((event) => {
+      if (event.type !== Form.Event.Created.type) return Effect.void
+      const { form } = Schema.decodeUnknownSync(Form.Event.Created.data)(event.data)
+      return Deferred.succeed(created, form).pipe(Effect.asVoid)
+    })
+    const fiber = yield* invocation.pipe(Effect.forkChild)
+    const finished = Fiber.join(fiber).pipe(Effect.andThen(Effect.die("Action completed without opening a form")))
+    const form = yield* Effect.raceFirst(Deferred.await(created), finished).pipe(Effect.ensuring(unsubscribe))
+    return { form, fiber }
+  })
+
+it.live("collects only missing or invalid required input and runs the target once on a valid answer", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const forms = yield* Form.Service
+    const calls: Schema.JsonObject[] = []
+    const schedule = {
+      ...definition,
+      name: "schedule_inspection",
+      inputs: {
+        station: { type: "lightning__textType", is_required: true, is_user_input: true },
+        visitDate: { type: "lightning__dateType", title: "Visit date", is_required: true, is_user_input: true },
+        duration: { type: "lightning__numberType", is_required: true, is_user_input: true },
+        attempts: { type: "lightning__integerType", is_required: true, is_user_input: true },
+        confirmed: { type: "lightning__booleanType", is_required: true, is_user_input: true },
+        comment: { type: "lightning__textType", is_user_input: true },
+        tenant: { type: "sampleId", is_required: true },
+      },
+    } satisfies Definition
+    yield* plugins.activate([
+      extension("standard-action-input", {
+        types,
+        targets: {
+          [schedule.target]: (input) =>
+            Effect.sync(() => {
+              calls.push(input)
+              return { receipt: { sampleID: "inspection", marker: "scheduled" }, note: "ok" }
+            }),
+        },
+        widgets: { [definition.widget]: view },
+        actions: [schedule],
+      }),
+    ])
+
+    const snapshot = yield* tools.snapshot()
+    const invoke = (input: unknown) => execute(snapshot, input, schedule.name)
+    const advertised = snapshot.definitions.find((tool) => tool.name === schedule.name)
+    expect(advertised?.inputSchema).toMatchObject({
+      properties: { visitDate: { type: "string" } },
+      required: ["tenant"],
+    })
+    const known = { station: "station 4", tenant: "north", duration: 1.5, attempts: 2, confirmed: false }
+    const { form, fiber: partial } = yield* openForm(invoke(known))
+    expect(form.fields).toEqual([expect.objectContaining({ key: "visitDate", title: "Visit date", format: "date" })])
+    expect(calls).toEqual([])
+    const invalid = yield* forms.reply({ id: form.id, answer: { visitDate: "2027-02-29" } }).pipe(Effect.flip)
+    expect(invalid.message).toContain("visitDate")
+    expect(yield* forms.state(form.id)).toEqual({ status: "pending" })
+    expect(calls).toEqual([])
+    const answer = { id: form.id, answer: { visitDate: "2028-02-29" } }
+    yield* forms.reply(answer)
+    expect((yield* forms.reply(answer).pipe(Effect.flip))._tag).toBe("Form.AlreadySettledError")
+    yield* Fiber.join(partial)
+    expect(calls).toEqual([{ ...known, ...answer.answer }])
+
+    const complete = { ...known, visitDate: "2027-05-12", comment: "before noon" }
+    yield* invoke(complete)
+    expect(yield* forms.list()).toEqual([])
+    expect(calls).toEqual([{ ...known, ...answer.answer }, complete])
+
+    const { form: correction, fiber: wrong } = yield* openForm(invoke({ ...known, visitDate: 42 }))
+    expect(correction.fields.map((field) => field.key)).toEqual(["visitDate"])
+    expect(calls).toHaveLength(2)
+    yield* forms.reply({ id: correction.id, answer: { visitDate: "2027-05-14" } })
+    yield* Fiber.join(wrong)
+    expect(calls[2]).toEqual({ ...known, visitDate: "2027-05-14" })
+
+    const { form: cancelled, fiber: dismissed } = yield* openForm(
+      invoke(known).pipe(Effect.catchDefect((error) => Effect.succeed(error))),
+    )
+    yield* forms.cancel(cancelled.id)
+    expect(yield* Fiber.join(dismissed)).toMatchObject({ message: expect.stringContaining("cancelled") })
+    const forbidden = yield* invoke({ station: known.station }).pipe(Effect.flip)
+    expect(forbidden.message).toContain("tenant")
+    const badOptional = yield* invoke({ ...known, comment: 42 }).pipe(Effect.flip)
+    expect(badOptional.message).toEndWith("comment")
+    expect(yield* forms.list()).toEqual([])
+    expect(calls).toHaveLength(3)
+
+    const { form: numeric, fiber: typed } = yield* openForm(invoke({
+      station: "station 4", tenant: "north", visitDate: "2027-05-14",
+    }))
+    expect(numeric.fields.map(({ type }) => type)).toEqual(["number", "integer", "boolean"])
+    const values = { duration: 2.5, attempts: 3, confirmed: false }
+    yield* forms.reply({ id: numeric.id, answer: values })
+    yield* Fiber.join(typed)
+    expect(calls[3]).toEqual({ ...known, ...values, visitDate: "2027-05-14" })
+  }),
+)
+
+it.live("reuses a named Editor for two Actions and validates the complete nested object before settling", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const forms = yield* Form.Service
+    const calls: Array<{ action: string; input: Schema.JsonObject }> = []
+    const booking = bookingType.mapFields((fields) => ({
+      ...fields,
+      preferences: Schema.Struct({ ownerID: Schema.String, label: Schema.optionalKey(Schema.String) }),
+    }))
+    const names = ["record_calibration", "review_calibration"] as const
+    const actions = names.map((name) => ({
+      ...definition,
+      name,
+      target: "local://" + name,
+      inputs: { booking: { type: "calibrationBooking", is_required: true, is_user_input: true } },
+    }))
+    yield* plugins.activate([
+      extension("named-action-input", {
+        types: { ...types, calibrationBooking: booking },
+        editors: {
+          calibrationBooking: {
+            lightningDesktopGenAi: {
+              ...bookingEditor,
+              fields: [
+                ...bookingEditor.fields,
+                { path: ["preferences", "label"], type: "lightning__textType", title: "Label" },
+              ],
+            },
+            lightningMobile: {
+              definition: "fixture/mobile-editor",
+              title: "Mobile editor",
+              fields: [{ path: ["facility"], type: "lightning__textType", title: "Other facility", required: true }],
+            },
+          },
+        },
+        targets: Object.fromEntries(actions.map(({ name, target }) => [
+          target,
+          (input: Schema.JsonObject) => Effect.sync(() => {
+            calls.push({ action: name, input })
+            return { receipt: { sampleID: "calibration", marker: name }, note: "ok" }
+          }),
+        ])),
+        widgets: { [definition.widget]: view },
+        actions,
+      }),
+    ])
+
+    const snapshot = yield* tools.snapshot()
+    const known = { facility: " North Lab ", memo: " ", slot: { code: "CAL-418", duration: 40 }, preferences: { ownerID: "crew-4" } }
+    for (const [index, { name }] of actions.entries()) {
+      expect(snapshot.definitions.find((tool) => tool.name === name)?.inputSchema).toMatchObject({
+        properties: { booking: { properties: { slot: { required: ["duration"] } } } },
+      })
+      const { form, fiber } = yield* openForm(execute(snapshot, { booking: known }, name))
+      expect(form.title).toBe("Calibration booking")
+      expect(form.metadata?.editor).toEqual({ channel: "lightningDesktopGenAi", definition: "fixture/calibration-booking-editor" })
+      expect(form.fields).toEqual([
+        expect.objectContaining({ key: "booking.facility", default: " North Lab " }),
+        expect.objectContaining({ key: "booking.memo", default: " " }),
+        expect.objectContaining({ key: "booking.slot.visitDate", format: "date" }),
+        expect.objectContaining({ key: "booking.slot.code", default: "CAL-418" }),
+        expect.objectContaining({ key: "booking.preferences.label" }),
+      ])
+      expect(calls).toHaveLength(index)
+      const answer = {
+        "booking.facility": index ? "South Lab" : " North Lab ",
+        "booking.memo": " ",
+        "booking.slot.visitDate": "2027-06-06",
+        "booking.slot.code": "wrong",
+      }
+      expect((yield* forms.reply({ id: form.id, answer }).pipe(Effect.flip)).message).toEndWith("booking.slot.code")
+      expect(yield* forms.state(form.id)).toEqual({ status: "pending" })
+      expect(calls).toHaveLength(index)
+      yield* forms.reply({ id: form.id, answer: { ...answer, "booking.slot.code": "CAL-501" } })
+      yield* Fiber.join(fiber)
+      expect(calls[index]).toEqual({
+        action: name,
+        input: { booking: {
+          facility: answer["booking.facility"],
+          memo: " ",
+          slot: { code: "CAL-501", visitDate: "2027-06-06", duration: 40 },
+          preferences: known.preferences,
+        } },
+      })
+    }
+    const unavailable = yield* execute(snapshot, { booking: { facility: "North Lab" } }, names[0]).pipe(Effect.flip)
+    expect(unavailable.message).toEndWith("booking.slot.duration")
+    const missingOwner = yield* execute(snapshot, {
+      booking: { facility: "North Lab", slot: { code: "CAL-418", visitDate: "2027-06-06", duration: 40 } },
+    }, names[0]).pipe(Effect.flip)
+    expect(missingOwner.message).toEndWith("booking.preferences.ownerID")
+    expect(yield* forms.list()).toEqual([])
+    expect(calls).toHaveLength(2)
+  }),
+)
 
 it.live("registers Actions as ordinary scoped tools and restores a shadowed registration on unload", () =>
   Effect.gen(function* () {

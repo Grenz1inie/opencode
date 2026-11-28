@@ -228,3 +228,13 @@ test("buildElicitationAnswer", () => {
     buildElicitationAnswer([...fields, { key: "secret", type: "string", hidden: true, default: "x" }], draft),
   ).toEqual({ name: "Ada", count: 3, notify: false, areas: ["app"], auth: true })
 })
+
+test("preserves an empty or whitespace-only prefilled Editor value", () => {
+  const editorFields = [
+    { key: "blank", type: "string", default: "" },
+    { key: "spaces", type: "string", default: " " },
+    { key: "omitted", type: "string" },
+  ] as const
+  const draft = selectElicitationDraft(createElicitationDockState(editorFields))
+  expect(buildElicitationAnswer(editorFields, draft, true)).toEqual({ blank: "", spaces: " " })
+})

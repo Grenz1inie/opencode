@@ -6,16 +6,19 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { ConfigEntryObserver } from "../config/plugin/entry-observer.js"
+import type { Form } from "../form.js"
 import { Permission } from "../permission.js"
+import { ActionInput } from "./action-input.js"
 import { normalizedName } from "./runtime.js"
 
 type Host = Pick<Context, "tool" | "permission" | "event"> & {
   readonly enabled: Effect.Effect<boolean>
+  readonly forms: Form.Interface
 }
 
 export const register = Effect.fn("ActionTool.register")(function* (catalog: Catalog, host: Host) {
   const tools = yield* Effect.forEach(catalog.actions, (definition) =>
-    compile(catalog, definition, host.permission).pipe(
+    compile(catalog, definition, host).pipe(
       Effect.catch((error) =>
         Effect.logWarning("Skipping invalid Action registration", {
           action: definition.name,
@@ -39,12 +42,12 @@ export const register = Effect.fn("ActionTool.register")(function* (catalog: Cat
   return { dispose: Scope.close(scope, Exit.void) }
 })
 
-const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Definition, permission: Context["permission"]) {
+const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Definition, host: Host) {
   const target = Object.hasOwn(catalog.targets, definition.target) ? catalog.targets[definition.target] : undefined
   if (typeof target !== "function") return yield* new Tool.Error({ message: `Unknown target "${definition.target}" at target` })
 
-  const input = yield* fields(catalog, "inputs", definition.inputs)
-  const output = yield* fields(catalog, "outputs", definition.outputs)
+  const input = yield* Effect.fromResult(ActionInput.compile(catalog, definition, host.forms))
+  const output = yield* outputFields(catalog, definition.outputs)
   const modelOutput = Schema.Struct(
     Object.fromEntries(Object.entries(output.fields).flatMap(([name, type]) =>
       definition.outputs[name]?.filter_from_agent === true ? [] : [[name, Schema.toType(type)] as const],
@@ -62,14 +65,17 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
 
   return {
     name: definition.name,
-    description: definition.description,
+    description: input.collects
+      ? definition.description + "\nPass only known values. Omit unknown inputs so OpenCode can collect eligible required values in a form."
+      : definition.description,
     options: { codemode: false },
-    input,
+    input: input.schema,
     output: modelOutput,
-    execute: (input: Schema.JsonObject, context: Tool.Context) =>
+    execute: (rawInput: Schema.JsonObject, context: Tool.Context) =>
       Effect.gen(function* () {
-        yield* permission.assert({ action, resources: ["*"], save: ["*"], ...Permission.invocation(context) })
-        const raw = yield* target(input, context)
+        const values = yield* input.prepare(rawInput, context)
+        yield* host.permission.assert({ action, resources: ["*"], save: ["*"], ...Permission.invocation(context) })
+        const raw = yield* target(values, context)
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(
           Effect.mapError(() => new Tool.Error({ message: `Action "${definition.name}" returned invalid outputs` })),
         )
@@ -79,12 +85,12 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
   }
 })
 
-const fields = Effect.fnUntraced(function* (catalog: Catalog, kind: "inputs" | "outputs", entries: Definition["inputs"]) {
+const outputFields = Effect.fnUntraced(function* (catalog: Catalog, entries: Definition["outputs"]) {
   const resolved = yield* Effect.forEach(Object.entries(entries), ([name, field]) => {
     const type = Object.hasOwn(catalog.types, field.type) ? catalog.types[field.type] : undefined
-    return !Schema.isSchema(type)
-      ? Effect.fail(new Tool.Error({ message: `Unknown type "${field.type}" at ${kind}.${name}` }))
-      : Effect.succeed([name, kind === "outputs" || field.is_required === true ? type : Schema.optionalKey(type)] as const)
+    return Schema.isSchema(type)
+      ? Effect.succeed([name, type] as const)
+      : Effect.fail(new Tool.Error({ message: `Unknown type "${field.type}" at outputs.${name}` }))
   })
   return Schema.Struct(Object.fromEntries(resolved))
 })

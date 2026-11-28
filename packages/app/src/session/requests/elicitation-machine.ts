@@ -288,6 +288,7 @@ export function buildElicitationAnswer(
       const value = field.type === "string" ? draft.text[field.key] : draft.number[field.key]
       const text = field.type === "string" && preserveText ? value : value?.trim()
 
+      if (text === "" && preserveText && field.type === "string" && field.default === "") return [[field.key, text]]
       if (!text) return []
 
       return [[field.key, field.type === "string" ? text : Number(text)]]

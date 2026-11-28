@@ -68,7 +68,19 @@ export class InvalidFormError extends Schema.TaggedError<InvalidFormError>()("Fo
   message: Schema.String,
 }) {}
 
-export type CreateInput = Omit<Form.Info, "id"> & { readonly id?: ID }
+export class CancelledError extends Schema.TaggedError<CancelledError>()("Form.CancelledError", {
+  action: Schema.String,
+}) {
+  override get message() {
+    return "The user cancelled the " + this.action
+  }
+}
+
+export type CreateInput = Omit<Form.Info, "id"> & {
+  readonly id?: ID
+  /** Validate before settlement. The returned effect publishes the accepted value to the asker. */
+  readonly validate?: (answer: Answer) => Effect.Effect<Effect.Effect<void>, string>
+}
 
 export interface ReplyInput {
   readonly id: ID
@@ -100,6 +112,7 @@ interface Entry {
   readonly form: Info
   readonly state: State
   readonly deferred: Deferred.Deferred<TerminalState>
+  readonly validate: CreateInput["validate"]
 }
 
 export const layer = Layer.effect(
@@ -142,6 +155,7 @@ export const layer = Layer.effect(
             form,
             state: { status: "pending" },
             deferred: yield* Deferred.make<TerminalState>(),
+            validate: input.validate,
           }
           yield* Cache.set(forms, id, entry)
           yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
@@ -179,24 +193,34 @@ export const layer = Layer.effect(
       return (yield* requireEntry(id)).state
     })
 
-    const reply = Effect.fn("Form.reply")((input: ReplyInput) =>
-      Effect.uninterruptible(
+    const reply = Effect.fn("Form.reply")(function* (input: ReplyInput) {
+      const entry = yield* requireEntry(input.id)
+      if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
+      const invalid = validateAnswer(entry.form.fields, input.answer)
+      if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
+      const accept = entry.validate
+        ? yield* entry.validate(input.answer).pipe(
+            Effect.mapError((message) => new InvalidAnswerError({ id: input.id, message })),
+          )
+        : Effect.void
+
+      yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const entry = yield* requireEntry(input.id)
-          if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
-          const invalid = validateAnswer(entry.form.fields, input.answer)
-          if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
+          const current = yield* requireEntry(input.id)
+          if (current.state.status !== "pending" || current.deferred !== entry.deferred)
+            return yield* new AlreadySettledError({ id: input.id })
           const next: TerminalState = { status: "answered", answer: input.answer }
           yield* bus.publish(Form.Event.Replied, {
             id: input.id,
             sessionID: entry.form.sessionID,
             answer: input.answer,
           })
-          yield* Cache.set(forms, input.id, { ...entry, state: next })
+          yield* Cache.set(forms, input.id, { ...entry, state: next, validate: undefined })
+          yield* accept
           yield* Deferred.succeed(entry.deferred, next)
         }),
-      ).pipe(settlement.withLock(input.id)),
-    )
+      ).pipe(settlement.withLock(input.id))
+    })
 
     const cancel = Effect.fn("Form.cancel")((id: ID, options?: CancelOptions) =>
       Effect.uninterruptible(
@@ -208,7 +232,7 @@ export const layer = Layer.effect(
             ...(options?.message === undefined ? {} : { message: options.message }),
           }
           yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
-          yield* Cache.set(forms, id, { ...entry, state: next })
+          yield* Cache.set(forms, id, { ...entry, state: next, validate: undefined })
           yield* Deferred.succeed(entry.deferred, next)
         }),
       ).pipe(settlement.withLock(id)),

@@ -140,7 +140,8 @@ export function createElicitationDock(input: {
 
       if (current.status !== "answering") return
       const metadata = untrack(input.request).metadata
-      const preserveText = metadata?.kind === "action" && metadata.action === CaseAction.action.name
+      const preserveText =
+        metadata?.kind === "action" && (metadata.editor !== undefined || metadata.action === CaseAction.action.name)
       const answer = buildElicitationAnswer(fields(), current.draft, preserveText)
 
       dispatch({ type: "send", action: { type: "reply", answer } })

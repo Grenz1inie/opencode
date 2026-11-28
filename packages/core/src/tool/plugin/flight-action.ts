@@ -15,14 +15,6 @@ import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 
-export class CancelledError extends Schema.TaggedError<CancelledError>()("FlightActionTool.CancelledError", {
-  action: Schema.optionalKey(Schema.String),
-}) {
-  override get message() {
-    return "The user cancelled the " + (this.action ?? "flight search")
-  }
-}
-
 const readSessionID = Schema.decodeUnknownOption(SessionID)
 const readMessageID = Schema.decodeUnknownOption(SessionMessage.ID)
 const readView = Schema.decodeUnknownOption(FlightAction.View)
@@ -327,7 +319,7 @@ export const Plugin = {
                   },
                 })
                 .pipe(Effect.mapError((error) => new ToolFailure({ message: error.message, error })))
-              if (state.status === "cancelled") return yield* Effect.die(new CancelledError({ action: "case submission" }))
+              if (state.status === "cancelled") return yield* Effect.die(new Form.CancelledError({ action: "case submission" }))
 
               const input = yield* Effect.try({
                 try: () => CaseAction.fromAnswer(state.answer),
@@ -382,7 +374,7 @@ export const Plugin = {
           },
           fields: [first, ...rest],
         }).pipe(Effect.mapError((cause) => new Tool.Error({ message: cause.message })))
-        if (state.status === "cancelled") return yield* Effect.die(new CancelledError())
+        if (state.status === "cancelled") return yield* Effect.die(new Form.CancelledError({ action: "flight search" }))
         event.input = { ...prepared.values, ...state.answer }
       }),
     )
