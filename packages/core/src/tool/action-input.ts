@@ -1,7 +1,7 @@
 export * as ActionInput from "./action-input.js"
 
 import { LightningEditor } from "@opencode/flight-action"
-import type { Catalog, Definition, InputField, StandardInputType } from "@opencode/plugin/action"
+import type { ActionContext, Catalog, Definition, InputField, StandardInputType } from "@opencode/plugin/action"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
@@ -36,9 +36,12 @@ type Entry = {
   readonly collection?: Collector
 }
 type Compiled = {
-  readonly schema: Schema.Codec<Schema.JsonObject, Schema.JsonObject> | StandardSchemaV1<Schema.JsonObject, Schema.JsonObject>
+  readonly schema:
+    | Schema.Codec<Schema.JsonObject, Schema.JsonObject>
+    | StandardSchemaV1<Schema.JsonObject, Schema.JsonObject>
   readonly collects: boolean
   readonly prepare: (input: Schema.JsonObject, context: Tool.Context) => Effect.Effect<Schema.JsonObject, Tool.Error>
+  readonly bind?: (context: ActionContext) => Effect.Effect<Schema.JsonObject, Tool.Error>
 }
 
 const parseEditor = Schema.decodeUnknownResult(
@@ -116,6 +119,7 @@ export function compile(
   forms: Form.Interface,
 ): Result.Result<Compiled, Tool.Error> {
   const entries: Entry[] = []
+  const bindings: Array<Entry & { readonly read: NonNullable<InputField["bind"]> }> = []
   for (const [name, input] of Object.entries(definition.inputs)) {
     const declared = own(catalog.types, input.type)
     const codec = Schema.isSchema(declared)
@@ -125,6 +129,12 @@ export function compile(
         : undefined
     if (!codec) return Result.fail(new Tool.Error({ message: `Unknown type "${input.type}" at inputs.${name}` }))
     const required = input.is_required === true
+    if (input.bind !== undefined) {
+      if (typeof input.bind !== "function")
+        return Result.fail(new Tool.Error({ message: `Invalid binding at inputs.${name}.bind` }))
+      bindings.push({ name, codec, required, read: input.bind })
+      continue
+    }
     if (!required || input.is_user_input !== true) {
       entries.push({ name, codec, required })
       continue
@@ -134,6 +144,24 @@ export function compile(
     entries.push({ name, codec, required, collection: collection.success })
   }
   const controls = entries.flatMap(({ collection }) => collection?.controls ?? [])
+  const bind = bindings.length
+    ? Effect.fnUntraced(function* (context: ActionContext) {
+        const values = yield* Effect.forEach(bindings, ({ name, codec, required, read }) =>
+          Effect.gen(function* () {
+            const value = yield* read(context)
+            if (value === undefined) {
+              if (required) return yield* diagnostic([name])
+              return
+            }
+            const decoded = yield* Schema.decodeUnknownEffect(codec)(value).pipe(
+              Effect.mapError((error) => diagnostic([name, ...(paths(error.issue)[0] ?? [])])),
+            )
+            return [name, decoded] as const
+          }),
+        )
+        return Object.fromEntries(values.filter((entry) => entry !== undefined))
+      })
+    : undefined
   const advertised = Schema.Struct(
     Object.fromEntries(
       entries.map(({ name, codec, required, collection }) => [
@@ -147,6 +175,7 @@ export function compile(
       schema: advertised,
       collects: false,
       prepare: (input: Schema.JsonObject) => Effect.succeed(input),
+      ...(bind && { bind }),
     })
   }
   const invalid = Form.validateFields(controls.map(({ field }) => field))
@@ -218,7 +247,7 @@ export function compile(
     if (state.status === "cancelled") return yield* Effect.die(new Form.CancelledError({ action: definition.name }))
     return yield* Deferred.await(accepted)
   })
-  return Result.succeed({ schema, collects: true, prepare })
+  return Result.succeed({ schema, collects: true, prepare, ...(bind && { bind }) })
 }
 
 const editableDraft = Effect.fnUntraced(function* (

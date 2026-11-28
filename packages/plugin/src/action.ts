@@ -5,10 +5,14 @@ import type { Registration } from "./effect/registration.js"
 
 type Field = { readonly type: string }
 
+export type ActionContext = Tool.RequestContext
+
 export interface InputField extends Field {
   readonly title?: string
   readonly is_required?: boolean
   readonly is_user_input?: boolean
+  /** Supplies the encoded value from the current session at execution. Bound inputs are omitted from the model schema. */
+  readonly bind?: (context: ActionContext) => Effect.Effect<Schema.Json | undefined, Tool.Error>
 }
 
 export type StandardInputType =
@@ -36,6 +40,8 @@ export interface Definition {
   readonly description: string
   readonly target: string
   readonly widget?: string
+  /** Reads current state during model discovery and again before execution. */
+  readonly available?: (context: ActionContext) => Effect.Effect<boolean>
   readonly inputs: Readonly<Record<string, InputField>>
   readonly outputs: Readonly<
     Record<string, Field & { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }>

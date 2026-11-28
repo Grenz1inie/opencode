@@ -71,6 +71,63 @@ const openForm = <A, E>(invocation: Effect.Effect<A, E>) =>
     return { form, fiber }
   })
 
+it.live("advertises an Action only for an eligible session and rechecks captured calls against current policy", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const sessionID = Session.ID.make("ses_action")
+    const agent = Agent.ID.make("build")
+    const eligible = new Set([sessionID])
+    const received: Schema.JsonObject[] = []
+    const action = {
+      ...definition,
+      available: ({ sessionID }) => Effect.sync(() => eligible.has(sessionID)),
+      inputs: {
+        ...definition.inputs,
+        workspace: {
+          type: "sampleId",
+          is_required: true,
+          is_user_input: true,
+          bind: ({ sessionID }) => Effect.succeed("lab:" + sessionID),
+        },
+      },
+    } satisfies Definition
+
+    yield* plugins.activate([
+      extension("session-action", {
+        actions: [action],
+        types,
+        widgets: { [definition.widget]: view },
+        targets: {
+          [action.target]: (input) => Effect.sync(() => {
+            received.push(input)
+            return { receipt: { sampleID: input.sampleID, marker: "ok" }, note: "ok" }
+          }),
+        },
+      }),
+    ])
+
+    const request = { context: { sessionID, agent } }
+    const active = yield* tools.snapshot(undefined, request)
+    expect(active.definitions.find((entry) => entry.name === action.name)?.inputSchema).toMatchObject({
+      properties: { sampleID: { type: "string" } },
+      required: ["sampleID"],
+    })
+    expect(active.definitions.find((entry) => entry.name === action.name)?.inputSchema.properties).not.toHaveProperty("workspace")
+    const other = yield* tools.snapshot(undefined, { context: { agent, sessionID: Session.ID.make("ses_other") } })
+    expect(other.definitions.map((entry) => entry.name)).not.toContain(action.name)
+    yield* execute(active, { sampleID: "CAL-28", workspace: "model-supplied" })
+    expect(received).toEqual([{ sampleID: "CAL-28", workspace: "lab:ses_action" }])
+
+    eligible.delete(sessionID)
+    const next = yield* tools.snapshot(undefined, request)
+    expect(next.definitions.map((entry) => entry.name)).not.toContain(action.name)
+    const stale = yield* execute(active, { sampleID: "CAL-29" }).pipe(Effect.flip)
+    expect(stale.message).toContain("not currently available")
+    expect(received).toHaveLength(1)
+  }),
+)
+
 it.live("collects only missing or invalid required input and runs the target once on a valid answer", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

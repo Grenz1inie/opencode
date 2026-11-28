@@ -51,6 +51,8 @@ export interface Context {
   readonly automation?: { readonly id: Automation.ID }
 }
 
+export type RequestContext = Pick<Context, "sessionID" | "agent">
+
 export interface Namespace {
   readonly name: string
   readonly description: string
@@ -132,6 +134,8 @@ export type Info<
 > = {
   readonly name: string
   readonly input: Input
+  /** Session-scoped discovery. The executor still owns its execution checks. */
+  readonly available?: (context: RequestContext) => Effect.Effect<boolean>
   readonly freeform?: Freeform
   readonly description: string
   readonly execute: (

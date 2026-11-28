@@ -45,6 +45,9 @@ export const register = Effect.fn("ActionTool.register")(function* (catalog: Cat
 const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Definition, host: Host) {
   const target = Object.hasOwn(catalog.targets, definition.target) ? catalog.targets[definition.target] : undefined
   if (typeof target !== "function") return yield* new Tool.Error({ message: `Unknown target "${definition.target}" at target` })
+  const available = definition.available
+  if (available !== undefined && typeof available !== "function")
+    return yield* new Tool.Error({ message: `Invalid availability condition for "${definition.name}" at available` })
 
   const input = yield* Effect.fromResult(ActionInput.compile(catalog, definition, host.forms))
   const output = yield* outputFields(catalog, definition.outputs)
@@ -62,9 +65,16 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
         id: widget,
       }).pipe(Effect.mapError((error) => new Tool.Error({ message: `Invalid widget "${widget}" at widget: ${error.message}` })))
   const action = normalizedName(definition)
+  const requireAvailable = (context: Tool.RequestContext) =>
+    available
+      ? available(context).pipe(Effect.flatMap((allowed) =>
+          allowed ? Effect.void : new Tool.Error({ message: `Action "${definition.name}" is not currently available` }),
+        ))
+      : Effect.void
 
   return {
     name: definition.name,
+    ...(available && { available }),
     description: input.collects
       ? definition.description + "\nPass only known values. Omit unknown inputs so OpenCode can collect eligible required values in a form."
       : definition.description,
@@ -73,9 +83,13 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
     output: modelOutput,
     execute: (rawInput: Schema.JsonObject, context: Tool.Context) =>
       Effect.gen(function* () {
+        const request = { sessionID: context.sessionID, agent: context.agent }
+        yield* requireAvailable(request)
         const values = yield* input.prepare(rawInput, context)
         yield* host.permission.assert({ action, resources: ["*"], save: ["*"], ...Permission.invocation(context) })
-        const raw = yield* target(values, context)
+        const bound = input.bind ? yield* input.bind(request) : undefined
+        yield* requireAvailable(request)
+        const raw = yield* target(bound ? { ...values, ...bound } : values, context)
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(
           Effect.mapError(() => new Tool.Error({ message: `Action "${definition.name}" returned invalid outputs` })),
         )
