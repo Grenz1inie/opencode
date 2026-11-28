@@ -12,6 +12,7 @@ import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
 import { Automation } from "../automation.js"
 import { Flag } from "../flag.js"
+import { Form } from "../form.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Environment } from "../environment/index.js"
@@ -79,6 +80,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const generate = yield* Generate.Service
   const generateText = (input: Generate.TextInput) => generate.text(input).pipe(Effect.map((text) => ({ text })))
   const permission = yield* Permission.Service
+  const forms = yield* Form.Service
   const hooks = yield* PluginHooks.Service
   const sessions = yield* Session.Service
   const instructionEntries = yield* InstructionEntry.Service
@@ -298,6 +300,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
             tool: context.tool,
             event: context.event,
             permission: context.permission,
+            forms,
           }),
       },
       terminal: {
@@ -670,6 +673,7 @@ export const requirements = LayerNode.group([
   Model.node,
   Command.node,
   Flag.node,
+  Form.node,
   Bus.node,
   Integration.node,
   KV.node,

@@ -1,12 +1,14 @@
 import { expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
 import { Flag } from "@opencode/core/flag"
+import { Form } from "@opencode/core/form"
 import { Plugin } from "@opencode/core/plugin"
 import { Tool } from "@opencode/core/tool"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
-import { Effect, Layer, Schema } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -52,6 +54,96 @@ const execute = (tools: Tool.Snapshot, input: unknown, name = definition.name) =
     messageID: SessionMessage.ID.make("msg_action"),
     call: { type: "tool-call", id: "call_action", name, input },
   })
+
+const openForm = <A, E>(invocation: Effect.Effect<A, E>) =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const created = yield* Deferred.make<Form.Info>()
+    const unsubscribe = yield* bus.listen((event) => {
+      if (event.type !== Form.Event.Created.type) return Effect.void
+      const { form } = Schema.decodeUnknownSync(Form.Event.Created.data)(event.data)
+      return Deferred.succeed(created, form).pipe(Effect.asVoid)
+    })
+    const fiber = yield* invocation.pipe(Effect.forkChild)
+    const form = yield* Deferred.await(created).pipe(Effect.timeout("3 seconds"), Effect.ensuring(unsubscribe))
+    return { form, fiber }
+  })
+
+it.live("collects only missing or invalid required input and runs the target once on a valid answer", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const forms = yield* Form.Service
+    const calls: Schema.JsonObject[] = []
+    const schedule = {
+      ...definition,
+      name: "schedule_inspection",
+      inputs: {
+        station: { type: "lightning__textType", is_required: true, is_user_input: true },
+        visitDate: { type: "lightning__dateType", title: "Visit date", is_required: true, is_user_input: true },
+        comment: { type: "lightning__textType", is_user_input: true },
+        tenant: { type: "sampleId", is_required: true },
+      },
+    } satisfies Definition
+    yield* plugins.activate([
+      extension("standard-action-input", {
+        types,
+        targets: {
+          [schedule.target]: (input) =>
+            Effect.sync(() => {
+              calls.push(input)
+              return { receipt: { sampleID: "inspection", marker: "scheduled" }, note: "ok" }
+            }),
+        },
+        widgets: { [definition.widget]: view },
+        actions: [schedule],
+      }),
+    ])
+
+    const snapshot = yield* tools.snapshot()
+    const invoke = (input: unknown) => execute(snapshot, input, schedule.name)
+    const advertised = snapshot.definitions.find((tool) => tool.name === schedule.name)
+    expect(advertised?.inputSchema).toMatchObject({
+      properties: { visitDate: { type: "string" } },
+      required: ["tenant"],
+    })
+    const known = { station: "station 4", tenant: "north" }
+    const { form, fiber: partial } = yield* openForm(invoke(known))
+    expect(form.fields).toEqual([expect.objectContaining({ key: "visitDate", title: "Visit date", format: "date" })])
+    expect(calls).toEqual([])
+    const invalid = yield* forms.reply({ id: form.id, answer: { visitDate: "2027-02-29" } }).pipe(Effect.flip)
+    expect(invalid.message).toContain("visitDate")
+    expect(yield* forms.state(form.id)).toEqual({ status: "pending" })
+    expect(calls).toEqual([])
+    const answer = { id: form.id, answer: { visitDate: "2028-02-29" } }
+    yield* forms.reply(answer)
+    expect((yield* forms.reply(answer).pipe(Effect.flip))._tag).toBe("Form.AlreadySettledError")
+    yield* Fiber.join(partial)
+    expect(calls).toEqual([{ ...known, ...answer.answer }])
+
+    const complete = { ...known, visitDate: "2027-05-12", comment: "before noon" }
+    yield* invoke(complete)
+    expect(yield* forms.list()).toEqual([])
+    expect(calls).toEqual([{ ...known, ...answer.answer }, complete])
+
+    const { form: correction, fiber: wrong } = yield* openForm(invoke({ ...known, visitDate: 42 }))
+    expect(correction.fields.map((field) => field.key)).toEqual(["visitDate"])
+    expect(calls).toHaveLength(2)
+    yield* forms.reply({ id: correction.id, answer: { visitDate: "2027-05-14" } })
+    yield* Fiber.join(wrong)
+    expect(calls[2]).toEqual({ ...known, visitDate: "2027-05-14" })
+
+    const { form: cancelled, fiber: dismissed } = yield* openForm(
+      invoke(known).pipe(Effect.catchDefect((error) => Effect.succeed(error))),
+    )
+    yield* forms.cancel(cancelled.id)
+    expect(yield* Fiber.join(dismissed)).toMatchObject({ message: expect.stringContaining("cancelled") })
+    const forbidden = yield* invoke({ station: known.station }).pipe(Effect.flip)
+    expect(forbidden.message).toContain("tenant")
+    expect(yield* forms.list()).toEqual([])
+    expect(calls).toHaveLength(3)
+  }),
+)
 
 it.live("registers Actions as ordinary scoped tools and restores a shadowed registration on unload", () =>
   Effect.gen(function* () {

@@ -5,12 +5,18 @@ import type { Registration } from "./effect/registration.js"
 
 type Field = { readonly type: string }
 
+export interface InputField extends Field {
+  readonly title?: string
+  readonly is_required?: boolean
+  readonly is_user_input?: boolean
+}
+
 export interface Definition {
   readonly name: string
   readonly description: string
   readonly target: string
   readonly widget?: string
-  readonly inputs: Readonly<Record<string, Field & { readonly is_required?: boolean }>>
+  readonly inputs: Readonly<Record<string, InputField>>
   readonly outputs: Readonly<
     Record<string, Field & { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }>
   >

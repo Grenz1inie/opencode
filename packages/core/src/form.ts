@@ -68,7 +68,18 @@ export class InvalidFormError extends Schema.TaggedError<InvalidFormError>()("Fo
   message: Schema.String,
 }) {}
 
-export type CreateInput = Omit<Form.Info, "id"> & { readonly id?: ID }
+export class CancelledError extends Schema.TaggedError<CancelledError>()("Form.CancelledError", {
+  action: Schema.String,
+}) {
+  override get message() {
+    return "The user cancelled the " + this.action
+  }
+}
+
+export type CreateInput = Omit<Form.Info, "id"> & {
+  readonly id?: ID
+  readonly validate?: (answer: Answer) => Effect.Effect<string | undefined>
+}
 
 export interface ReplyInput {
   readonly id: ID
@@ -100,6 +111,7 @@ interface Entry {
   readonly form: Info
   readonly state: State
   readonly deferred: Deferred.Deferred<TerminalState>
+  readonly validate: CreateInput["validate"]
 }
 
 export const layer = Layer.effect(
@@ -142,6 +154,7 @@ export const layer = Layer.effect(
             form,
             state: { status: "pending" },
             deferred: yield* Deferred.make<TerminalState>(),
+            validate: input.validate,
           }
           yield* Cache.set(forms, id, entry)
           yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
@@ -184,7 +197,8 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const entry = yield* requireEntry(input.id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
-          const invalid = validateAnswer(entry.form.fields, input.answer)
+          const invalid =
+            validateAnswer(entry.form.fields, input.answer) ?? (yield* (entry.validate?.(input.answer) ?? Effect.undefined))
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
           const next: TerminalState = { status: "answered", answer: input.answer }
           yield* bus.publish(Form.Event.Replied, {
@@ -192,7 +206,7 @@ export const layer = Layer.effect(
             sessionID: entry.form.sessionID,
             answer: input.answer,
           })
-          yield* Cache.set(forms, input.id, { ...entry, state: next })
+          yield* Cache.set(forms, input.id, { ...entry, state: next, validate: undefined })
           yield* Deferred.succeed(entry.deferred, next)
         }),
       ).pipe(settlement.withLock(input.id)),
@@ -208,7 +222,7 @@ export const layer = Layer.effect(
             ...(options?.message === undefined ? {} : { message: options.message }),
           }
           yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
-          yield* Cache.set(forms, id, { ...entry, state: next })
+          yield* Cache.set(forms, id, { ...entry, state: next, validate: undefined })
           yield* Deferred.succeed(entry.deferred, next)
         }),
       ).pipe(settlement.withLock(id)),
