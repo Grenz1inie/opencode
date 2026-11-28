@@ -61,7 +61,11 @@ export interface ServerInstructions {
 }
 
 /** Checked MCP tool definition tagged with the server that owns it. */
-export type Tool = McpClient.Tool & { readonly server: ServerName; readonly codemode?: boolean }
+export type Tool = McpClient.Tool & {
+  readonly server: ServerName
+  readonly codemode?: boolean
+  readonly action?: Mcp.ActionConfig
+}
 export type ToolResultContent = McpClient.CallToolContent
 export type ToolResult = McpClient.CallToolResult
 export type Prompt = McpClient.Prompt & { readonly server: ServerName }
@@ -767,17 +771,18 @@ export const layer = (options?: Options) =>
       const serverTools = (name: ServerName, entry: ServerEntry) => {
         const source = entry.connection.tools
         if (!source) return []
-        if (entry.tagged?.source !== source)
+        if (entry.tagged?.source !== source) {
+          const actions = entry.config.experimental?.actions
           entry.tagged = {
             source,
-            tools: source.map(
-              (tool): Tool => ({
-                ...tool,
-                server: name,
-                codemode: entry.config.codemode,
-              }),
-            ),
+            tools: source.map((tool): Tool => ({
+              ...tool,
+              server: name,
+              codemode: entry.config.codemode,
+              ...(actions && Object.hasOwn(actions, tool.name) ? { action: actions[tool.name] } : {}),
+            })),
           }
+        }
         return entry.tagged.tools
       }
 
