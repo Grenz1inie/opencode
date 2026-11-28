@@ -336,6 +336,41 @@ describe("Form", () => {
     }),
   )
 
+  it.effect("accepts only one reply while the first reply is being published", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const bus = yield* Bus.Service
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+
+      yield* service.create(input)
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Form.Event.Replied.type
+          ? Deferred.succeed(entered, undefined).pipe(
+              Effect.flatMap((first) => first ? Deferred.await(release) : Effect.void),
+            )
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const first = yield* service.reply({ id: formID, answer: { name: "Ava" } }).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Deferred.await(entered)
+
+      const duplicate = yield* service.reply({ id: formID, answer: { name: "Bea" } }).pipe(
+        Effect.as(null),
+        Effect.catchTag("Form.AlreadySettledError", Effect.succeed),
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(first)
+
+      expect(yield* Fiber.join(duplicate)).toMatchObject({ _tag: "Form.AlreadySettledError", id: formID })
+      expect(yield* service.state(formID)).toEqual({ status: "answered", answer: { name: "Ava" } })
+    }),
+  )
+
   it.effect("keeps forms pending when reply event publication fails", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

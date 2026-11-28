@@ -17,31 +17,70 @@ const target: FlightCard = {
 
 const revised = { revision: "revised", outputs: {} }
 
-test("settles each date change once and keeps the previous result when a form is cancelled", () => {
+const newest = { revision: "newest", outputs: {} }
+
+function loaded(result: typeof revised | null) {
   const loading = transition(initial, { type: "bind", target })
-  const ready = transition(loading, { type: "read", target, result: null })
-  const changing = transition(ready, { type: "start", target })
+  const attempt = Symbol()
+  const reading = transition(loading, { type: "read.start", target, attempt })
 
-  expect(presentation(changing)).toMatchObject({ busy: true, result: null })
-  expect(transition(changing, { type: "start", target })).toBe(changing)
+  return transition(reading, { type: "read", target, attempt, result })
+}
 
-  const saved = transition(changing, { type: "settled", target, result: revised })
-  const second = transition(saved, { type: "start", target })
-  const cancelled = transition(second, { type: "settled", target, result: null })
+test("settles each date change once and keeps the previous result when a form is cancelled", () => {
+  const ready = loaded(revised)
+  const attempt = Symbol()
+  const changing = transition(ready, { type: "start", target, attempt })
+
+  expect(presentation(changing)).toMatchObject({ busy: true, result: revised })
+  expect(transition(changing, { type: "start", target, attempt: Symbol() })).toBe(changing)
+  expect(transition(changing, { type: "settled", target, attempt: Symbol() })).toBe(changing)
+
+  const cancelled = transition(changing, { type: "settled", target, attempt })
 
   expect(presentation(cancelled)).toEqual({ available: true, busy: false, result: revised, error: undefined })
 })
 
-test("keeps an update received before the initial read and ignores a reply from a previous card", () => {
-  const loading = transition(initial, { type: "bind", target })
-  const updated = transition(loading, { type: "published", target, result: revised })
+test("restores a missed revision on reconnect and ignores an overlapping older read", () => {
+  const ready = loaded(null)
+  const stale = Symbol()
+  const current = Symbol()
+  const pending = transition(ready, { type: "read.start", target, attempt: stale })
+  const reconnect = transition(pending, { type: "read.start", target, attempt: current })
 
-  expect(transition(updated, { type: "read", target, result: null })).toBe(updated)
+  expect(presentation(reconnect)).toMatchObject({ busy: true, result: null })
+  expect(transition(reconnect, { type: "read", target, attempt: stale, result: revised })).toBe(reconnect)
 
-  const other = { ...target, card: { ...target.card, callID: "other" } }
-  const current = transition(updated, { type: "bind", target: other })
+  const recovered = transition(reconnect, { type: "read", target, attempt: current, result: newest })
 
-  expect(transition(current, { type: "settled", target, result: revised })).toBe(current)
-  expect(presentation(transition(current, { type: "read", target: other, result: null, error: "Unavailable" })))
-    .toMatchObject({ available: true, busy: false, result: null, error: "Unavailable" })
+  expect(presentation(recovered)).toMatchObject({ busy: false, result: newest })
+
+  const retry = Symbol()
+  const failed = transition(recovered, { type: "read.start", target, attempt: retry })
+  const unavailable = transition(failed, { type: "read", target, attempt: retry, result: null, error: "Unavailable" })
+
+  expect(presentation(unavailable)).toMatchObject({ busy: false, result: newest, error: "Unavailable" })
+})
+
+test("a delayed change response cannot invalidate the reconnect read or replace its saved result", () => {
+  const ready = loaded(null)
+  const change = Symbol()
+  const read = Symbol()
+  const changing = transition(ready, { type: "start", target, attempt: change })
+  const reconnect = transition(changing, { type: "read.start", target, attempt: read })
+  const settled = transition(reconnect, { type: "settled", target, attempt: change })
+  const recovered = transition(settled, { type: "read", target, attempt: read, result: newest })
+
+  expect(presentation(settled)).toMatchObject({ busy: true })
+  expect(presentation(recovered)).toMatchObject({ busy: false, result: newest })
+})
+
+test("ignores a read from a previous card or session", () => {
+  const ready = loaded(revised)
+  const attempt = Symbol()
+  const reading = transition(ready, { type: "read.start", target, attempt })
+  const other = { ...target, card: { ...target.card, sessionID: "other" } }
+  const current = transition(reading, { type: "bind", target: other })
+
+  expect(transition(current, { type: "read", target, attempt, result: revised })).toBe(current)
 })
