@@ -1,5 +1,5 @@
 import { ToolFailure } from "@opencode/ai/effect"
-import { ActionOutput, FlightAction } from "@opencode/flight-action"
+import { ActionOutput, CustomerReviews, FlightAction } from "@opencode/flight-action"
 import type { ActionConfig } from "@opencode/schema/mcp"
 import { Effect, Schema } from "effect"
 import type { Mcp } from "../mcp/index.js"
@@ -55,8 +55,24 @@ export const projectMcpAction = Effect.fnUntraced(function* (
         const check = await validator(outputSchema)
         if (!check(structured.success)) throw new Error("Invalid MCP output")
       },
-      catch: () => mcpActionFailure("mcpSchema"),
+      catch: () => {
+        if (action.type === "customerReviews") {
+          const parsed = CustomerReviews.invocable(structured.success)
+          if ("diagnostic" in parsed && parsed.diagnostic.stage === "actionSchema")
+            return mcpActionFailure("mcpSchema", parsed.diagnostic.path)
+        }
+        return mcpActionFailure("mcpSchema")
+      },
     })
+  }
+
+  if (action.type === "customerReviews") {
+    const parsed = CustomerReviews.invocable(structured.success)
+    if ("diagnostic" in parsed) return yield* mcpActionFailure(parsed.diagnostic.stage, parsed.diagnostic.path)
+
+    const projections = ActionOutput.project({ ...CustomerReviews.outputs, ...action.outputs }, { reviews: parsed.reviews })
+    const widget = Object.hasOwn(projections.user, "reviews") ? CustomerReviews.widget : undefined
+    return { output: projections.model, ...ActionOutput.result(projections, widget) }
   }
 
   const results = decodeResults(structured.success.results)

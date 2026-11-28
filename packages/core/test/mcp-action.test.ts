@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { FlightAction } from "@opencode/flight-action"
+import { CustomerReviews, FlightAction } from "@opencode/flight-action"
 import type { ActionConfig } from "@opencode/schema/mcp"
-import { Effect } from "effect"
+import { Effect, type Schema } from "effect"
 import { projectMcpAction } from "../src/tool/mcp-action.js"
 
 const action = {
@@ -57,4 +57,67 @@ test("fails the current Action at its first invalid stage without rendering raw 
       actionOutput: { outputs: stage === "widget" ? { results, forUser: "user" } : {} },
     })
   }
+})
+
+const pronto = { type: "customerReviews" } satisfies ActionConfig
+const reviews = CustomerReviews.sample(false)
+const envelope = {
+  actionName: "GetCustomerReviewsAction",
+  isSuccess: true,
+  outputValues: { isSuccess: true, message: "ENVELOPE_ONLY_MESSAGE", reviews },
+}
+const prontoResponse = { isError: false, structured: envelope, content: [{ type: "text" as const, text: "RAW_ENVELOPE" }] }
+
+test.each([
+  [true, false, true, true],
+  [true, true, true, false],
+  [false, false, false, true],
+  [false, true, false, false],
+] as const)("projects Pronto reviews with is_displayable=%s and filter_from_agent=%s", async (
+  is_displayable,
+  filter_from_agent,
+  user,
+  model,
+) => {
+  const binding = { ...pronto, outputs: { reviews: { is_displayable, filter_from_agent } } }
+  const expectedModel: Schema.JsonObject = model ? { reviews } : {}
+
+  const expectedUser: Schema.JsonObject = user ? { reviews } : {}
+  expect(await Effect.runPromise(projectMcpAction(binding, undefined, prontoResponse))).toEqual({
+    output: expectedModel,
+    content: JSON.stringify(expectedModel),
+    metadata: {
+      actionOutput: user ? { widget: CustomerReviews.widget, outputs: expectedUser } : { outputs: expectedUser },
+    },
+  })
+})
+
+test("keeps a field diagnostic when a declared MCP schema rejects the same Pronto field", async () => {
+  const schema = {
+    type: "object",
+    properties: { outputValues: { type: "object", properties: { isSuccess: { type: "boolean" } } } },
+  } as const
+  const invalid = {
+    ...prontoResponse,
+    structured: { ...envelope, outputValues: { ...envelope.outputValues, isSuccess: "true" } },
+  }
+  const error = await Effect.runPromise(Effect.flip(projectMcpAction(pronto, schema, invalid)))
+
+  expect(error.metadata).toEqual({
+    actionDiagnostic: { stage: "mcpSchema", path: "$.structuredContent.outputValues.isSuccess" },
+    actionOutput: { outputs: {} },
+  })
+})
+
+test("preserves the Pronto failure stage and path without exposing its envelope or text copy", async () => {
+  const failed = {
+    ...prontoResponse,
+    structured: { ...envelope, outputValues: { ...envelope.outputValues, isSuccess: false, reviews: null } },
+  }
+  const error = await Effect.runPromise(Effect.flip(projectMcpAction(pronto, undefined, failed)))
+
+  expect(error.metadata).toEqual({
+    actionDiagnostic: { stage: "actionResult", path: "$.structuredContent.outputValues.isSuccess" },
+    actionOutput: { outputs: {} },
+  })
 })

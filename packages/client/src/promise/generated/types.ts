@@ -420,7 +420,7 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 export type UsageLimitsMeter = { percent: number; limited: boolean; resetsAt: number }
 
 export type McpActionConfig = {
-  type: "find_flights"
+  type: "find_flights" | "customerReviews"
   outputs?: { [x: string]: { is_displayable?: boolean; filter_from_agent?: boolean } }
   attributes?: { [x: string]: string }
 }
@@ -4446,7 +4446,7 @@ export type ExperimentalMcpAddInput = {
         readonly experimental?: {
           readonly actions?: {
             readonly [x: string]: {
-              readonly type: "find_flights"
+              readonly type: "find_flights" | "customerReviews"
               readonly outputs?: {
                 readonly [x: string]: { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }
               }
@@ -4468,7 +4468,7 @@ export type ExperimentalMcpAddInput = {
         readonly experimental?: {
           readonly actions?: {
             readonly [x: string]: {
-              readonly type: "find_flights"
+              readonly type: "find_flights" | "customerReviews"
               readonly outputs?: {
                 readonly [x: string]: { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }
               }
