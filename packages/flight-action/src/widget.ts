@@ -16,7 +16,15 @@ export type Rendered = {
 
 type Scope = Readonly<Record<string, unknown>>
 const pathToken = /^\{!(\$\w+(?:\.\w+)+)\}$/
-const tiles = new Set(["tile/widget", "tile/column", "tile/row", "tile/text", "tile/icon", "tile/separator", "tile/button"])
+const textAttributes: Readonly<Record<string, readonly string[]>> = {
+  "tile/widget": [],
+  "tile/column": ["gap"],
+  "tile/row": ["gap", "justify", "align"],
+  "tile/text": ["text", "variant", "color", "weight"],
+  "tile/icon": ["name", "alt"],
+  "tile/separator": [],
+  "tile/button": ["label"],
+}
 
 export type Operation = { widget: string; node: string; definition: string }
 
@@ -61,7 +69,14 @@ export function render(resource: string, node: Node, attributes: Scope): Rendere
 }
 
 function expand(resource: string, node: Node, scope: Scope, path: string): Rendered[] {
-  if (!tiles.has(node.definition)) throw new BindingError(resource, path + ".definition", "Unsupported tile")
+  const keys = Object.hasOwn(textAttributes, node.definition) ? textAttributes[node.definition] : undefined
+  if (!keys) throw new BindingError(resource, path + ".definition", "Unsupported tile")
+  for (const key of keys) {
+    const value = node.attributes?.[key]
+    if (value !== undefined && typeof value !== "string") {
+      throw new BindingError(resource, path + ".attributes." + key, "Expected a string")
+    }
+  }
   const scopes = node.meta?.forEach === undefined
     ? [scope]
     : (() => {

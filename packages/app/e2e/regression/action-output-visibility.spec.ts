@@ -205,3 +205,53 @@ test("renders an extension's declarative Action result using existing tiles", as
   await expect(card.getByRole("heading", { name: "Sample SAMPLE-22", exact: true })).toBeVisible()
   await expect(page.getByText("MODEL_ONLY_FIXTURE")).toHaveCount(0)
 })
+
+test("keeps an extension Action's empty result, rendered fallback, and execution failure distinct on replay", async ({
+  page,
+}) => {
+  const name = "inspect_archive_batch"
+  const hidden = "MODEL_ONLY_ARCHIVE"
+  const part = (key: string) => page.locator(`[data-timeline-part-id="prt_archive_${key}"]`)
+  const view = {
+    id: "archive/detail",
+    label: "Archive detail",
+    body: { definition: "tile/text", attributes: { text: 42 } },
+  }
+
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([
+      toolPart("prt_archive_empty", name, "completed", {}, {
+        metadata: { actionOutput: { outputs: { entries: [] } } },
+      }),
+      toolPart("prt_archive_fallback", name, "completed", {}, {
+        output: hidden,
+        metadata: { actionOutput: { outputs: { entries: ["ARCHIVE_FALLBACK"] }, view } },
+      }),
+      toolPart("prt_archive_renderer", name, "completed", {}, {
+        output: hidden,
+        metadata: {
+          actionOutput: { outputs: { entries: ["ARCHIVE_RENDERER"] } },
+          actionDiagnostic: { stage: "renderer", path: "renderers.archive/missing" },
+        },
+      }),
+      toolPart("prt_archive_failure", name, "error", {}, {
+        error: hidden,
+        metadata: { actionDiagnostic: { stage: "actionResult", path: "target" } },
+      }),
+    ])],
+  })
+
+  async function assertResults() {
+    await expect(part("empty").getByRole("status")).toHaveText("No results")
+    await expect(part("fallback").getByRole("status")).toContainText("archive/detail · $.attributes.text")
+    await expect(part("fallback").locator("pre")).toContainText("ARCHIVE_FALLBACK")
+    await expect(part("renderer").getByRole("status")).toContainText("renderers.archive/missing")
+    await expect(part("renderer").locator("pre")).toContainText("ARCHIVE_RENDERER")
+    await expect(part("failure").getByRole("alert")).toHaveText("The Action reported a failure (target).")
+    await expect(part("failure").locator("pre")).toHaveCount(0)
+    await expect(page.getByText(hidden, { exact: false })).toHaveCount(0)
+  }
+  await assertResults()
+  await page.reload()
+  await assertResults()
+})

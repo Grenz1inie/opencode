@@ -109,7 +109,7 @@ export function renderActionWidget(
   const result = source?.bind(outputs)
   const rejectedOutput = result?.rejectedOutput
 
-  if (widget && (!entry || source !== entry)) return { diagnostic: "$.widget", rejectedOutput }
+  if (widget && (!entry || source !== entry)) return { diagnostic: `${widget} · $.widget`, rejectedOutput }
 
   if (!source || !result) return {}
 
