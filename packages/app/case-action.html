@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Simulated support case</title>
+    <style>
+      :root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+      main { max-width: 32rem; margin: 32px auto; padding: 0 16px; }
+      form { display: grid; gap: 16px; margin-bottom: 20px; }
+      #fields { display: grid; gap: 12px; }
+      [hidden] { display: none; }
+      label { display: grid; gap: 6px; }
+      input, select, textarea, button { font: inherit; padding: 8px; min-width: 0; }
+      textarea { resize: vertical; }
+      footer { display: flex; flex-wrap: wrap; gap: 8px; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Simulated support case</h1>
+      <form id="case-form" aria-label="Submit support case">
+        <div id="fields"></div>
+        <footer>
+          <button type="submit">Submit simulated case</button>
+          <button type="button" id="cancel">Cancel</button>
+        </footer>
+      </form>
+      <p id="status" role="status"></p>
+      <pre id="result" hidden></pre>
+      <button type="button" id="open" hidden>Open form</button>
+    </main>
+    <script type="module" src="/examples/case-action.ts"></script>
+  </body>
+</html>

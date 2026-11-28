@@ -1,4 +1,5 @@
 import { createMemo, createSignal, onCleanup, runWithOwner, untrack } from "solid-js"
+import { CaseAction } from "@opencode/flight-action"
 import { isFormInvalidAnswerError, type FormInfo, type LocationRef } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
 import type { ServerSDK } from "@/runtime/server/client"
@@ -138,7 +139,11 @@ export function createElicitationDock(input: {
       const current = untrack(dockState)
 
       if (current.status !== "answering") return
-      dispatch({ type: "send", action: { type: "reply", answer: buildElicitationAnswer(fields(), current.draft) } })
+      const metadata = untrack(input.request).metadata
+      const preserveText = metadata?.kind === "action" && CaseAction.isEditor(metadata.editor)
+      const answer = buildElicitationAnswer(fields(), current.draft, preserveText)
+
+      dispatch({ type: "send", action: { type: "reply", answer } })
     },
     dismiss: () => dispatch({ type: "send", action: { type: "cancel" } }),
   }
