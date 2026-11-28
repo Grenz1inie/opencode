@@ -109,7 +109,7 @@ export function renderActionWidget(
   const result = source?.bind(outputs)
   const rejectedOutput = result?.rejectedOutput
 
-  if (widget && (!entry || source !== entry)) return { diagnostic: "$.widget", rejectedOutput }
+  if (widget && (!entry || source !== entry)) return { diagnostic: `${widget} · $.widget`, rejectedOutput }
 
   if (!source || !result) return {}
 
@@ -132,7 +132,7 @@ function renderTree(render: () => Widget.Rendered) {
   } catch (error) {
     if (!(error instanceof Widget.BindingError)) throw error
 
-    return { diagnostic: error.message }
+    return { diagnostic: `${error.resource} · ${error.path}` }
   }
 }
 

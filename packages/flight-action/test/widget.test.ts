@@ -46,3 +46,15 @@ test("registers the original review shapes and diagnoses invalid output bindings
   })
   expect(CustomerReviews.bind({ reviews: { averageRating: 4.5, items: [] } }).path).toBe("$.outputs.reviews.reviewCount")
 })
+
+test("locates an invalid rendered component attribute without exposing its value", () => {
+  expect(() => Widget.render("sample/attributes", {
+    definition: "tile/widget",
+    children: [{ definition: "tile/text", attributes: { text: { data: "PRIVATE_ATTRIBUTE" } } }],
+  }, {})).toThrow("sample/attributes · $.children[0].attributes.text: Expected a string")
+  expect(() => Widget.render("sample/attributes", {
+    definition: "tile/column",
+    meta: { forEach: "{!$attrs.entries}" },
+    children: [{ definition: "tile/text", attributes: { txt: "misspelled" } }],
+  }, { entries: [] })).toThrow("sample/attributes · $.children[0].attributes.txt: Unsupported attribute")
+})

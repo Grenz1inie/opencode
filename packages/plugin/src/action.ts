@@ -35,11 +35,18 @@ export interface Editor {
   readonly fields: readonly [EditorField, ...EditorField[]]
 }
 
+export interface Renderer {
+  readonly type: string
+  readonly widget: string
+}
+
 export interface Definition {
   readonly name: string
   readonly description: string
   readonly target: string
   readonly widget?: string
+  /** Selects a registered renderer for a displayable output type and takes precedence over the direct Widget. */
+  readonly renderer?: string
   /** Reads current state during model discovery and again before execution. */
   readonly available?: (context: ActionContext) => Effect.Effect<boolean>
   /** Requires a fresh, explicit user decision for this invocation. */
@@ -58,6 +65,7 @@ export interface Catalog {
   readonly types: Readonly<Record<string, Schema.Codec<Schema.Json, Schema.Json>>>
   /** Editors keyed by input type and then by channel, such as `lightningDesktopGenAi`. */
   readonly editors?: Readonly<Record<string, Readonly<Record<string, Editor>>>>
+  readonly renderers?: Readonly<Record<string, Renderer>>
   readonly widgets?: Readonly<Record<string, WidgetResource.Definition>>
 }
 

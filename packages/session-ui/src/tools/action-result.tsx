@@ -88,24 +88,37 @@ export function ActionResult(
   })
 
   const widgetLabel = () => widget()?.title ?? i18n.t(widget()?.label ?? "ui.actionOutput.completed")
-  const failure = createMemo(() => Option.getOrUndefined(readDiagnostic(props.metadata.actionDiagnostic)))
 
-  const output = createMemo(() => {
-    const value = result()?.outputs
+  const reported = createMemo(() => {
+    const diagnostic = Option.getOrUndefined(readDiagnostic(props.metadata.actionDiagnostic))
 
-    if (!value) return
-
-    const rejected = widget()?.rejectedOutput
-    const visible = Object.entries(value).filter(([name]) => name !== rejected)
-
-    return visible.length ? JSON.stringify(Object.fromEntries(visible), null, 2) : undefined
+    return diagnostic && i18n.t(`ui.actionOutput.diagnostic.${diagnostic.stage}`, { path: diagnostic.path })
   })
 
-  const diagnostic = () => {
-    if (Object.hasOwn(props.metadata, "actionOutput") && !result()) return "$.metadata.actionOutput"
+  const visible = createMemo(() => {
+    const rejected = widget()?.rejectedOutput
 
-    return widget()?.diagnostic
-  }
+    return Object.entries(result()?.outputs ?? {}).filter(([name]) => name !== rejected)
+  })
+
+  const output = createMemo(() => visible().length ? JSON.stringify(Object.fromEntries(visible()), null, 2) : undefined)
+
+  const empty = createMemo(() => {
+    const lists = visible().flatMap(([, value]) => Array.isArray(value) ? [value] : [])
+
+    return lists.length > 0 && lists.every((items) => items.length === 0)
+  })
+
+  const diagnostic = createMemo(() => {
+    const message = reported()
+    if (message) return message
+
+    const path = Object.hasOwn(props.metadata, "actionOutput") && !result()
+      ? "$.metadata.actionOutput"
+      : widget()?.diagnostic
+
+    return path && i18n.t("ui.actionOutput.invalid", { path })
+  })
 
   return (
     <div data-component="action-result">
@@ -128,17 +141,21 @@ export function ActionResult(
           )}
         </Match>
         <Match when={props.status !== "completed" && !change.view().result}>
-          <Show when={failure()} fallback={<span role="status">{i18n.t("ui.actionOutput.failed")}</span>}>
-            {(item) => (
+          <Show when={reported()} fallback={<span role="status">{i18n.t("ui.actionOutput.failed")}</span>}>
+            {(message) => (
               <>
-                <p role="alert">{i18n.t(`ui.actionOutput.diagnostic.${item().stage}`, { path: item().path })}</p>
+                <p role="alert">{message()}</p>
                 <Show when={output()}>{(text) => <OutputText text={text()} />}</Show>
               </>
             )}
           </Show>
         </Match>
         <Match when={true}>
-          <Switch fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>
+          <Switch fallback={
+            <Show when={!diagnostic() && !empty()}>
+              <span role="status">{i18n.t("ui.actionOutput.completed")}</span>
+            </Show>
+          }>
             <Match when={widget()?.tree}>
               {(tree) => <ActionWidget tree={tree()} label={widgetLabel()} actions={actions()} />}
             </Match>
@@ -146,6 +163,9 @@ export function ActionResult(
               {(flight) => <FlightWidget view={flight()} label={i18n.t("ui.flightAction.results")} actions={actions()} />}
             </Match>
           </Switch>
+          <Show when={empty() && !diagnostic()}>
+            <span role="status">{i18n.t("ui.actionOutput.empty")}</span>
+          </Show>
           <Show when={change.view().error}>
             {(message) => <p role="alert">{message()}</p>}
           </Show>
@@ -162,9 +182,9 @@ export function ActionResult(
               </Show>
             }
           >
-            {(path) => (
+            {(message) => (
               <>
-                <p role="status">{i18n.t("ui.actionOutput.invalid", { path: path() })}</p>
+                <p role="status">{message()}</p>
                 <Show when={output()}>{(text) => <OutputText text={text()} />}</Show>
               </>
             )}
