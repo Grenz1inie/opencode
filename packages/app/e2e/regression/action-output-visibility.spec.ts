@@ -145,3 +145,33 @@ test("renders original Pronto reviews and shows diagnostics for invalid direct o
   await expect(badRating.locator("pre")).toContainText("VALID_REVIEW_NOTICE")
   await expect(badRating).not.toContainText("REJECTED_RATING")
 })
+
+test("keeps a valid empty Pronto MCP card distinct from failed Invocable results", async ({ page }) => {
+  const mcpTool = "pronto_getCustomerReviews"
+  const success = CustomerReviews.run({ empty: true })
+
+  const failure = (id: string, stage: ActionOutput.Diagnostic["stage"], path: string) =>
+    toolPart(id, mcpTool, "error", {}, {
+      error: "Private server response",
+      metadata: { actionDiagnostic: { stage, path }, actionOutput: { outputs: {} } },
+    })
+
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([
+      toolPart("prt_reviews_mcp_empty", mcpTool, "completed", {}, { output: success.content, metadata: success.metadata }),
+      failure("prt_reviews_mcp_failed", "actionResult", "$.structuredContent.outputValues.isSuccess"),
+      failure("prt_reviews_mcp_invalid", "actionSchema", "$.structuredContent.outputValues.reviews"),
+    ])],
+  })
+
+  const card = page.getByRole("region", { name: "Customer reviews" })
+  await expect(card).toHaveCount(1)
+  await expect(card.getByRole("heading", { name: "Customer Reviews" })).toBeVisible()
+  await expect(card).toContainText("Average: 0/5 (0 reviews)")
+  await expect(card.getByRole("article")).toHaveCount(0)
+  await expect(page.getByRole("alert").filter({ hasText: "The Action reported a failure" }))
+    .toContainText("$.structuredContent.outputValues.isSuccess")
+  await expect(page.getByRole("alert").filter({ hasText: "did not match the Action output contract" }))
+    .toContainText("$.structuredContent.outputValues.reviews")
+  await expect(page.getByText("Private server response")).toHaveCount(0)
+})

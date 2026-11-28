@@ -5,16 +5,31 @@ import { render } from "solid-js/web"
 
 function Demo() {
   const [empty, setEmpty] = createSignal(false)
+  const [wrapped, setWrapped] = createSignal(false)
 
   const result = createMemo(() => {
-    const output = CustomerReviews.run({ empty: empty() }).metadata.actionOutput
+    const reviews = CustomerReviews.sample(empty())
 
-    return renderActionWidget(CustomerReviews.widget, output.outputs)
+    if (!wrapped()) return renderActionWidget(CustomerReviews.widget, { reviews })
+
+    const parsed = CustomerReviews.invocable({
+      actionName: "GetCustomerReviewsAction",
+      isSuccess: true,
+      outputValues: { isSuccess: true, reviews },
+    })
+
+    if ("diagnostic" in parsed) return { tree: undefined, diagnostic: parsed.diagnostic.path }
+
+    return renderActionWidget(CustomerReviews.widget, { reviews: parsed.reviews })
   })
 
   return (
     <>
       <h1>Pronto review widget</h1>
+      <nav aria-label="Result format">
+        <button aria-pressed={!wrapped()} onClick={() => setWrapped(false)}>Direct result</button>
+        <button aria-pressed={wrapped()} onClick={() => setWrapped(true)}>Invocable result</button>
+      </nav>
       <nav aria-label="Sample data">
         <button aria-pressed={!empty()} onClick={() => setEmpty(false)}>Two reviews</button>
         <button aria-pressed={empty()} onClick={() => setEmpty(true)}>Empty list</button>

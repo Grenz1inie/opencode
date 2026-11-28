@@ -8,7 +8,7 @@ type Projections = { readonly user: Schema.JsonObject; readonly model: Schema.Js
 export type Binding<View> = { view?: View; path?: string; rejectedOutput?: string }
 
 export const Diagnostic = Schema.Struct({
-  stage: Schema.Literals(["call", "structured", "mcpSchema", "actionSchema", "widget"]),
+  stage: Schema.Literals(["call", "structured", "mcpSchema", "actionSchema", "actionResult", "widget"]),
   path: Schema.String,
 })
 export type Diagnostic = typeof Diagnostic.Type

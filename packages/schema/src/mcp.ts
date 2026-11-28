@@ -25,7 +25,9 @@ export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annota
 
 export interface ActionConfig extends Schema.Schema.Type<typeof ActionConfig> {}
 export const ActionConfig = Schema.Struct({
-  type: Schema.Literal("find_flights"),
+  type: Schema.Literals(["find_flights", "customerReviews"]).annotate({
+    description: "Registered Action UI binding. customerReviews selects Pronto's Invocable uiResource.",
+  }),
   outputs: Schema.Record(
     Schema.String,
     Schema.Struct({
