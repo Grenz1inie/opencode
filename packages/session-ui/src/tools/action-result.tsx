@@ -10,6 +10,8 @@ import type { ToolProps } from "./tool-renderer"
 
 const presentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
 
+const readDiagnostic = Schema.decodeUnknownOption(ActionOutput.Diagnostic)
+
 const legacyView = Schema.decodeUnknownOption(FlightAction.View)
 
 export function ActionResult(
@@ -68,6 +70,7 @@ export function ActionResult(
   })
 
   const widgetLabel = () => widget()?.label
+  const failure = createMemo(() => Option.getOrUndefined(readDiagnostic(props.metadata.actionDiagnostic)))
 
   const output = createMemo(() => {
     const value = result()?.outputs
@@ -93,7 +96,14 @@ export function ActionResult(
           <span role="status">{i18n.t("ui.actionOutput.pending")}</span>
         </Match>
         <Match when={props.status !== "completed"}>
-          <span role="status">{i18n.t("ui.actionOutput.failed")}</span>
+          <Show when={failure()} fallback={<span role="status">{i18n.t("ui.actionOutput.failed")}</span>}>
+            {(item) => (
+              <>
+                <p role="alert">{i18n.t(`ui.actionOutput.diagnostic.${item().stage}`, { path: item().path })}</p>
+                <Show when={output()}>{(text) => <OutputText text={text()} />}</Show>
+              </>
+            )}
+          </Show>
         </Match>
         <Match when={true}>
           <Switch fallback={<span role="status">{i18n.t("ui.actionOutput.completed")}</span>}>

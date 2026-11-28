@@ -23,9 +23,29 @@ export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annota
     'MCP protocol negotiation. "auto" (default) probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "legacy" opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "2026-07-28" requires that revision and fails otherwise.',
 })
 
+export interface ActionConfig extends Schema.Schema.Type<typeof ActionConfig> {}
+export const ActionConfig = Schema.Struct({
+  type: Schema.Literal("find_flights"),
+  outputs: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      is_displayable: optional(Schema.Boolean),
+      filter_from_agent: optional(Schema.Boolean),
+    }),
+  ).pipe(optional),
+  attributes: Schema.Record(Schema.String, Schema.String).pipe(optional),
+}).annotate({ identifier: "Mcp.ActionConfig" })
+
+const ExperimentalConfig = Schema.Struct({
+  actions: Schema.Record(Schema.String, ActionConfig).pipe(optional).annotate({
+    description: "Action UI bindings keyed by the server's original tool name.",
+  }),
+}).annotate({ identifier: "Mcp.ExperimentalConfig" })
+
 export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
+  experimental: ExperimentalConfig.pipe(optional),
   cwd: Schema.String.pipe(optional).annotate({
     description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
   }),
@@ -57,6 +77,7 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
   type: Schema.Literal("remote"),
   url: Schema.String,
+  experimental: ExperimentalConfig.pipe(optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
   oauth: Schema.Union([OAuthConfig, Schema.Literal(false)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),

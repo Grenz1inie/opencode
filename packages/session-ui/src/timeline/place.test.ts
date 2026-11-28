@@ -34,6 +34,18 @@ describe("place", () => {
     ])
   })
 
+  test("places registered MCP Action results outside ordinary tool groups", () => {
+    const ordinary = storyTool("ordinary", "mcp_search", "completed", {})
+    const action = storyTool("action", "mcp_search", "completed", {}, { metadata: { actionOutput: { outputs: {} } } })
+    const detail = custom({ tools: { placement: "grouped" } })
+
+    for (const timeline of ["current", "next"] as const) {
+      const placed = place([placeFactOf(ordinary), placeFactOf(action)], detail, { timeline })
+
+      expect(placed.map((item) => [item.placement, item.group])).toEqual([["grouped", "context"], ["separate", "part"]])
+    }
+  })
+
   test("commentary follows the commentary setting", () => {
     const text = [{ kind: "text" as const }]
 

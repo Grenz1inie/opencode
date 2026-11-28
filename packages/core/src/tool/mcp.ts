@@ -12,6 +12,7 @@ import { Mime } from "../mime.js"
 import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
+import { mcpActionFailure, projectMcpAction } from "./mcp-action.js"
 import { ReadToolFileSystem } from "./read-filesystem.js"
 import { effectiveName, normalizedName } from "./runtime.js"
 
@@ -57,7 +58,7 @@ export const layer = Layer.effect(
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
                 description: tool.description ?? "",
                 input: tool.inputSchema as JsonSchema.JsonSchema,
-                output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
+                output: (tool.action ? {} : (tool.outputSchema ?? {})) as JsonSchema.JsonSchema,
                 execute: (input, context) =>
                   Effect.gen(function* () {
                     yield* permission.assert({
@@ -77,10 +78,14 @@ export const layer = Layer.effect(
                       .pipe(
                         Effect.catchTags({
                           "MCP.NotFoundError": (error) =>
-                            new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
-                          "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
+                            tool.action
+                              ? mcpActionFailure("call")
+                              : new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
+                          "MCP.ToolCallError": (error) =>
+                            tool.action ? mcpActionFailure("call") : new ToolFailure({ message: error.message }),
                         }),
                       )
+                    if (tool.action) return yield* projectMcpAction(tool.action, tool.outputSchema, result)
                     if (result.isError)
                       return yield* new ToolFailure({
                         message:

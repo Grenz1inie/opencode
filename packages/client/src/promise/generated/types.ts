@@ -419,6 +419,12 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 
 export type UsageLimitsMeter = { percent: number; limited: boolean; resetsAt: number }
 
+export type McpActionConfig = {
+  type: "find_flights"
+  outputs?: { [x: string]: { is_displayable?: boolean; filter_from_agent?: boolean } }
+  attributes?: { [x: string]: string }
+}
+
 export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigCompactionPercent = string
@@ -1085,6 +1091,8 @@ export type VcsInfo = { provider?: string; branch: VcsBranch }
 export type WebSearchProvider = { id: WebSearchID; name: string }
 
 export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMeter; monthly: UsageLimitsMeter }
+
+export type McpExperimentalConfig = { actions?: { [x: string]: McpActionConfig } }
 
 export type ConfigModelCapabilities = {
   tools?: boolean
@@ -2658,6 +2666,7 @@ export type ConfigEntry =
               | {
                   type: "local"
                   command: Array<string>
+                  experimental?: McpExperimentalConfig
                   cwd?: string
                   environment?: { [x: string]: string }
                   disabled?: boolean
@@ -2669,6 +2678,7 @@ export type ConfigEntry =
               | {
                   type: "remote"
                   url: string
+                  experimental?: McpExperimentalConfig
                   headers?: { [x: string]: string }
                   oauth?:
                     | {
@@ -2769,6 +2779,7 @@ export type ConfigEntry =
           codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
+          flight_action?: boolean
           media_blob?: boolean
           artifacts?: boolean
           console_watches?: boolean
@@ -4432,6 +4443,17 @@ export type ExperimentalMcpAddInput = {
     | {
         readonly type: "local"
         readonly command: ReadonlyArray<string>
+        readonly experimental?: {
+          readonly actions?: {
+            readonly [x: string]: {
+              readonly type: "find_flights"
+              readonly outputs?: {
+                readonly [x: string]: { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }
+              }
+              readonly attributes?: { readonly [x: string]: string }
+            }
+          }
+        }
         readonly cwd?: string
         readonly environment?: { readonly [x: string]: string }
         readonly disabled?: boolean
@@ -4443,6 +4465,17 @@ export type ExperimentalMcpAddInput = {
     | {
         readonly type: "remote"
         readonly url: string
+        readonly experimental?: {
+          readonly actions?: {
+            readonly [x: string]: {
+              readonly type: "find_flights"
+              readonly outputs?: {
+                readonly [x: string]: { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }
+              }
+              readonly attributes?: { readonly [x: string]: string }
+            }
+          }
+        }
         readonly headers?: { readonly [x: string]: string }
         readonly oauth?:
           | {

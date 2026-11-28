@@ -8,6 +8,7 @@ import {
   currentToolMetadata,
   readImagePath,
 } from "../message/current-tool-state"
+import { isActionResult } from "../tools/action-result-state"
 import { isInterruptedError } from "./turn-phase-machine"
 
 /**
@@ -43,6 +44,7 @@ export type PlaceFact = {
   name: string
   tool: string
   mode: FactMode
+  actionResult?: boolean
   status: Tool["state"]["status"] | "user"
   failed: boolean
   /** The user stopped it, by stopping the turn or cancelling its command. */
@@ -211,6 +213,7 @@ function placeFact(tool: Tool, id: string, read: Reads, scriptDiffs = true): Pla
     name,
     tool: tool.name,
     mode: modes.get(name) ?? "tool",
+    actionResult: isActionResult(tool.name, read.metadata()),
     status: state.status,
     failed: !stopped && currentToolFailed({ ...tool, name }),
     stopped,
