@@ -67,7 +67,7 @@ export const Plugin = {
     ) {
       yield* Effect.logDebug("Flight search target invoked", { callID, ...input, attempt })
       return yield* Effect.try({
-        try: () => FlightAction.run(input, (query) => FlightAction.simulate(query, attempt)),
+        try: () => FlightAction.run(input, { attempt }),
         catch: (error) => new ToolFailure({ message: "Flight search failed", error, metadata: { flightFailure: input } }),
       })
     })

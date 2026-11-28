@@ -40,7 +40,7 @@ test("keeps an empty result and a failed query separate from an earlier success"
   const failed = { ...earlier, dateOfTravel: "2026-12-08" }
   const name = FlightAction.definition.name
   const previous = FlightAction.run(earlier).tool
-  const noFlights = FlightAction.run(empty, (input) => FlightAction.simulate(input, "search")).tool
+  const noFlights = FlightAction.run(empty, { attempt: "search" }).tool
 
   await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([
