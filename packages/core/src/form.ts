@@ -4,6 +4,7 @@ import { Form } from "@opencode/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 
 const RETENTION = Duration.minutes(10)
 
@@ -105,6 +106,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const settlement = KeyedMutex.makeUnsafe<ID>()
     let closed = false
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
@@ -193,7 +195,7 @@ export const layer = Layer.effect(
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
         }),
-      ),
+      ).pipe(settlement.withLock(input.id)),
     )
 
     const cancel = Effect.fn("Form.cancel")((id: ID, options?: CancelOptions) =>
@@ -209,7 +211,7 @@ export const layer = Layer.effect(
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
         }),
-      ),
+      ).pipe(settlement.withLock(id)),
     )
 
     const close = Effect.sync(() => {
