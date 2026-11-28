@@ -30,6 +30,7 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
 const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
   ...Record.map(ConfigFlag.registry, () => state),
   todo: { enabled: false, source: "default" },
+  action_ui: { enabled: false, source: "default" },
   flight_action: { enabled: false, source: "default" },
   opencode_api: { enabled: false, source: "default" },
 })
@@ -44,7 +45,7 @@ describe("Flag.resolve", () => {
     expect(Flag.resolve({ entries: [], channel })).toEqual(every({ enabled, source: "default" }))
   })
 
-  test.each(["todo", "flight_action"] as const)("%s is opt-in only: on only when named in OPENCODE_FLAGS or experimental.%s", (key) => {
+  test.each(["todo", "action_ui", "flight_action"] as const)("%s is opt-in only: on only when named in OPENCODE_FLAGS or experimental.%s", (key) => {
     expect(Flag.resolve({ entries: [], channel: "dev", overrides: "all" })[key]).toEqual({
       enabled: false,
       source: "default",

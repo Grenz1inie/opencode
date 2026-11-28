@@ -9,7 +9,7 @@
     "typecheck:tsc": "tsc --noEmit",
     "test": "bun test"
   },
-  "dependencies": { "effect": "catalog:" },
+  "dependencies": { "@opencode/schema": "workspace:*", "effect": "catalog:" },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",

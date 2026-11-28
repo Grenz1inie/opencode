@@ -11,7 +11,6 @@ import { Agent } from "../agent.js"
 import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
 import { Automation } from "../automation.js"
-import { Config } from "../config.js"
 import { Flag } from "../flag.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
@@ -64,7 +63,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const providers = yield* Provider.Service
   const models = yield* Model.Service
   const commands = yield* Command.Service
-  const config = yield* Config.Service
   const flags = yield* Flag.Service
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
@@ -295,7 +293,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
     experimental: {
       action: {
         register: (catalog) =>
-          ActionTool.register(catalog, { config, flags, tool: context.tool, event: context.event, permission: context.permission }),
+          ActionTool.register(catalog, {
+            enabled: flags.enabled("action_ui"),
+            tool: context.tool,
+            event: context.event,
+            permission: context.permission,
+          }),
       },
       terminal: {
         read: (input) => persistentPty.read(input.sessionID, input.lines),
@@ -666,7 +669,6 @@ export const requirements = LayerNode.group([
   Provider.node,
   Model.node,
   Command.node,
-  Config.node,
   Flag.node,
   Bus.node,
   Integration.node,

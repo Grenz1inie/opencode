@@ -26,7 +26,10 @@ const definition = {
   target: "local://primary",
   widget: "sample/receipt",
   inputs: { sampleID: { type: "sampleId", is_required: true } },
-  outputs: { receipt: { type: "receipt", is_displayable: true } },
+  outputs: {
+    receipt: { type: "receipt", is_displayable: true },
+    note: { type: "sampleId", is_displayable: true, filter_from_agent: true },
+  },
 } satisfies Definition
 
 const types = {
@@ -42,12 +45,12 @@ function extension(id: string, catalog: Catalog): Plugin.Generation {
   }
 }
 
-const execute = (tools: Tool.Snapshot, input: unknown) =>
+const execute = (tools: Tool.Snapshot, input: unknown, name = definition.name) =>
   tools.execute({
     sessionID: Session.ID.make("ses_action"),
     agent: Agent.ID.make("build"),
     messageID: SessionMessage.ID.make("msg_action"),
-    call: { type: "tool-call", id: "call_action", name: definition.name, input },
+    call: { type: "tool-call", id: "call_action", name, input },
   })
 
 it.live("registers Actions as ordinary scoped tools and restores a shadowed registration on unload", () =>
@@ -58,7 +61,7 @@ it.live("registers Actions as ordinary scoped tools and restores a shadowed regi
     const target = (marker: string) => (input: Schema.JsonObject) =>
       Effect.sync(() => {
         calls.push({ input, target: marker })
-        return { receipt: { sampleID: input.sampleID, marker } }
+        return { receipt: { sampleID: input.sampleID, marker }, note: "user-only" }
       })
     const catalog = {
       types,
@@ -83,6 +86,7 @@ it.live("registers Actions as ordinary scoped tools and restores a shadowed regi
           properties: { sampleID: expect.objectContaining({ type: "string" }) },
           required: ["sampleID"],
         }),
+        outputSchema: expect.objectContaining({ required: ["receipt"] }),
       }),
     ])
     const invalid = yield* execute(snapshot, { sampleID: 42 }).pipe(Effect.flip)
@@ -93,7 +97,11 @@ it.live("registers Actions as ordinary scoped tools and restores a shadowed regi
     const receipt = { ...input, marker: "backup" }
     const result = yield* execute(snapshot, input)
     expect(result.content).toEqual([{ type: "text", text: JSON.stringify({ receipt }) }])
-    expect(result.metadata?.actionOutput).toEqual({ widget: definition.widget, view, outputs: { receipt } })
+    expect(result.output).toEqual({ receipt })
+    expect(result.metadata?.actionOutput).toEqual({
+      view: { ...view, id: definition.widget },
+      outputs: { receipt, note: "user-only" },
+    })
     expect(calls).toEqual([{ input, target: "backup" }])
 
     yield* plugins.activate([first])
@@ -140,5 +148,30 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
     expect(error.message).toBe('Action "inspect_sample" returned invalid outputs')
     expect(error.metadata?.actionOutput).toBeUndefined()
     expect(received).toEqual([input])
+  }),
+)
+
+it.live("keeps a static registered view when all outputs are model-only", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const confirmation = { label: "Sample confirmed", body: { definition: "tile/text", attributes: { text: "Confirmed" } } }
+
+    yield* plugins.activate([
+      extension("static-action", {
+        types,
+        actions: [{
+          ...definition,
+          name: "confirm_sample",
+          outputs: { note: { type: "sampleId" } },
+        }],
+        targets: { [definition.target]: () => Effect.succeed({ note: "model only" }) },
+        widgets: { [definition.widget]: confirmation },
+      }),
+    ])
+
+    const result = yield* execute(yield* tools.snapshot(), { sampleID: "sample-9" }, "confirm_sample")
+    expect(result.output).toEqual({ note: "model only" })
+    expect(result.metadata?.actionOutput).toEqual({ outputs: {}, view: { ...confirmation, id: definition.widget } })
   }),
 )

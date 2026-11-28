@@ -178,9 +178,9 @@ test("keeps a valid empty Pronto MCP card distinct from failed Invocable results
 
 test("renders an extension's declarative Action result using existing tiles", async ({ page }) => {
   const output = {
-    widget: "sample/result",
     outputs: { receipt: { reference: "SAMPLE-22" } },
     view: {
+      id: "sample/result",
       label: "Sample result",
       body: {
         definition: "tile/widget",
@@ -200,7 +200,8 @@ test("renders an extension's declarative Action result using existing tiles", as
       ]),
     ],
   })
-  const card = page.getByRole("region", { name: "Sample result" })
+  const card = page.getByRole("region", { name: "Sample result", exact: true })
+  await expect(card).toHaveCount(1)
   await expect(card.getByRole("heading", { name: "Sample SAMPLE-22", exact: true })).toBeVisible()
-  await expect(page.getByText("MODEL_ONLY_FIXTURE", { exact: true })).toHaveCount(0)
+  await expect(page.getByText("MODEL_ONLY_FIXTURE")).toHaveCount(0)
 })

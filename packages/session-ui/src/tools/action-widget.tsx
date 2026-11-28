@@ -101,7 +101,7 @@ export function renderActionWidget(
   emptyFlightLabel = "",
   view?: ActionOutput.View,
 ): WidgetResult {
-  if (widget && view) return { ...renderTree(() => Widget.render(widget, view.body, outputs)), title: view.label }
+  if (view) return { ...renderTree(() => Widget.render(view.id, view.body, outputs)), title: view.label }
 
   const entry = registry.find((registration) => registration.widget === widget)
   const known = registry.find((registration) => registration.tool === tool && Object.hasOwn(outputs, registration.output))

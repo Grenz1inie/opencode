@@ -4,16 +4,13 @@ import { ActionOutput } from "@opencode/flight-action"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Schema } from "effect"
-import type { Config } from "../config.js"
+import { Effect, Exit, Schema, Scope } from "effect"
 import { ConfigEntryObserver } from "../config/plugin/entry-observer.js"
-import type { Flag } from "../flag.js"
 import { Permission } from "../permission.js"
 import { normalizedName } from "./runtime.js"
 
 type Host = Pick<Context, "tool" | "permission" | "event"> & {
-  readonly config: Config.Interface
-  readonly flags: Flag.Interface
+  readonly enabled: Effect.Effect<boolean>
 }
 
 export const register = Effect.fn("ActionTool.register")(function* (catalog: Catalog, host: Host) {
@@ -27,13 +24,19 @@ export const register = Effect.fn("ActionTool.register")(function* (catalog: Cat
       ),
     ),
   )
-  const loaded = yield* ConfigEntryObserver.observe(host.config, host.event, host.tool.reload())
-  return yield* host.tool.transform((editor) => {
-    if (!host.flags.resolve(loaded.entries).action_ui.enabled) return
+  const owner = yield* Scope.Scope
+  const scope = yield* Scope.fork(owner)
+  const enabled = yield* ConfigEntryObserver.observeValue(host.enabled, host.event, host.tool.reload()).pipe(
+    Scope.provide(scope),
+  )
+  yield* host.tool.transform((editor) => {
+    if (!enabled.value) return
     tools.forEach((tool) => {
       if (tool) editor.add(tool)
     })
-  })
+  }).pipe(Scope.provide(scope))
+
+  return { dispose: Scope.close(scope, Exit.void) }
 })
 
 const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Definition, permission: Context["permission"]) {
@@ -42,13 +45,19 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
 
   const input = yield* fields(catalog, "inputs", definition.inputs)
   const output = yield* fields(catalog, "outputs", definition.outputs)
+  const modelOutput = Schema.Struct(
+    Object.fromEntries(Object.entries(output.fields).flatMap(([name, type]) =>
+      definition.outputs[name]?.filter_from_agent === true ? [] : [[name, Schema.toType(type)] as const],
+    )),
+  )
   const widget = definition.widget
   const widgets = catalog.widgets ?? {}
   const view = widget === undefined
     ? undefined
-    : yield* Schema.decodeUnknownEffect(ActionOutput.View)(Object.hasOwn(widgets, widget) ? widgets[widget] : undefined).pipe(
-        Effect.mapError((error) => new Tool.Error({ message: `Invalid widget "${widget}" at widget: ${error.message}` })),
-      )
+    : yield* Schema.decodeUnknownEffect(ActionOutput.View)({
+        ...(Object.hasOwn(widgets, widget) ? widgets[widget] : undefined),
+        id: widget,
+      }).pipe(Effect.mapError((error) => new Tool.Error({ message: `Invalid widget "${widget}" at widget: ${error.message}` })))
   const action = normalizedName(definition)
 
   return {
@@ -56,6 +65,7 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
     description: definition.description,
     options: { codemode: false },
     input,
+    output: modelOutput,
     execute: (input: Schema.JsonObject, context: Tool.Context) =>
       Effect.gen(function* () {
         yield* permission.assert({ action, resources: ["*"], save: ["*"], ...Permission.invocation(context) })
@@ -63,7 +73,8 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(
           Effect.mapError(() => new Tool.Error({ message: `Action "${definition.name}" returned invalid outputs` })),
         )
-        return ActionOutput.result(ActionOutput.project(definition.outputs, value), widget, view)
+        const projections = ActionOutput.project(definition.outputs, value)
+        return { ...ActionOutput.result(projections, view), output: projections.model }
       }),
   }
 })

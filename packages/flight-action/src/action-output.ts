@@ -1,7 +1,7 @@
 export * as ActionOutput from "./action-output.js"
 
 import { Schema } from "effect"
-import { Widget } from "./widget.js"
+import { WidgetResource } from "@opencode/schema/widget-resource"
 
 type Policy = { readonly is_displayable?: boolean; readonly filter_from_agent?: boolean }
 type Projections = { readonly user: Schema.JsonObject; readonly model: Schema.JsonObject }
@@ -15,8 +15,8 @@ export const Diagnostic = Schema.Struct({
 export type Diagnostic = typeof Diagnostic.Type
 
 export const View = Schema.Struct({
-  label: Schema.NonEmptyString,
-  body: Widget.Node,
+  id: Schema.NonEmptyString,
+  ...WidgetResource.Definition.fields,
 })
 export type View = typeof View.Type
 
@@ -39,15 +39,18 @@ export function project(policies: Readonly<Record<string, Policy>>, validated: S
   }
 }
 
-export function result(projections: Projections, widget?: string, view?: View) {
+export function result(projections: Projections, widget?: string | View) {
+  const presentation =
+    typeof widget === "object" ? { view: widget }
+    : widget !== undefined && Object.keys(projections.user).length > 0 ? { widget }
+    : {}
+
   return {
     content: JSON.stringify(projections.model),
     metadata: {
       actionOutput: {
         outputs: projections.user,
-        ...(widget !== undefined && Object.keys(projections.user).length > 0
-          ? { widget, ...(view === undefined ? {} : { view }) }
-          : {}),
+        ...presentation,
       },
     },
   }

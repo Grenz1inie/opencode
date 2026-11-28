@@ -1,4 +1,5 @@
 import type { Tool } from "@opencode/schema/tool"
+import type { WidgetResource } from "@opencode/schema/widget-resource"
 import type { Effect, Schema, Scope } from "effect"
 import type { Registration } from "./effect/registration.js"
 
@@ -21,7 +22,7 @@ export interface Catalog {
   readonly actions: readonly Definition[]
   readonly targets: Readonly<Record<string, Target>>
   readonly types: Readonly<Record<string, Schema.Codec<Schema.Json, Schema.Json>>>
-  readonly widgets?: Readonly<Record<string, { readonly label: string; readonly body: Schema.JsonObject }>>
+  readonly widgets?: Readonly<Record<string, WidgetResource.Definition>>
 }
 
 export interface ExperimentalActionDomain {

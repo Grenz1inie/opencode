@@ -30,6 +30,14 @@ const readRevision = Schema.decodeUnknownOption(FlightReschedule.Result)
 const readPresentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
 const readResults = Schema.decodeUnknownOption(FlightAction.Results)
 const readFailure = Schema.decodeUnknownOption(FlightAction.Input)
+const readFlightInput = Schema.decodeUnknownEffect(FlightAction.Input)
+// Associate the partial-input schema with this registration so an overriding tool keeps its own requirements.
+const flightQuery = FlightAction.Input.mapFields((fields) =>
+  Object.fromEntries(Object.entries(fields).map(([key, field]) => [
+    key,
+    FlightAction.formable(key) ? Schema.optionalKey(field) : field,
+  ])),
+)
 
 function firstOutputs(metadata: Schema.JsonObject | undefined) {
   if (metadata && Object.hasOwn(metadata, "actionOutput")) {
@@ -224,13 +232,16 @@ export const Plugin = {
           options: { codemode: false },
           description:
             "Find simulated flights. Call this tool with the cities and date the user supplied. Omit unknown fields so the tool can show a form. Do not guess a missing travel date or ask for it in chat. A failed search can be retried from its result card.",
-          input: FlightAction.Input,
+          input: flightQuery,
           execute: (input, context) =>
             Effect.gen(function* () {
+              const query = yield* readFlightInput(input).pipe(
+                Effect.mapError((error) => new ToolFailure({ message: "Invalid flight search input", error })),
+              )
               yield* permit(Permission.invocation(context)).pipe(
                 Effect.mapError((error) => new ToolFailure({ message: "Permission denied: find_flights", error })),
               )
-              return (yield* execute(input, context.id)).tool
+              return (yield* execute(query, context.id)).tool
             }),
         })
         editor.add({
@@ -352,17 +363,9 @@ export const Plugin = {
       })
       .pipe(Effect.orDie)
 
-    yield* ctx.session.hook("context", (event) =>
-      Effect.sync(() => {
-        const tool = event.tools[name]
-        if (!tool || !Array.isArray(tool.input.required)) return
-        tool.input = { ...tool.input, required: tool.input.required.filter((key) => !FlightAction.formable(key)) }
-      }),
-    )
-
     yield* ctx.tool.hook("execute.before", (event) =>
       Effect.gen(function* () {
-        if (event.tool !== name || event.info?.input !== FlightAction.Input) return
+        if (event.tool !== name || event.info?.input !== flightQuery) return
         const prepared = yield* Effect.try({
           try: () => FlightAction.prepare(event.input),
           catch: (cause) => new Tool.Error({ message: cause instanceof Error ? cause.message : "Invalid flight search input" }),
