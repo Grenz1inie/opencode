@@ -3,20 +3,16 @@ export * as FlightAction from "./flight-action.js"
 export { CustomerReviews } from "./customer-reviews.js"
 export { Widget } from "./widget.js"
 export { ActionOutput } from "./action-output.js"
+export { LightningEditor } from "./lightning-editor.js"
+export { CaseAction } from "./case-action.js"
 
 import { Schema, SchemaIssue } from "effect"
 import { ActionOutput } from "./action-output.js"
 import type { Widget } from "./widget.js"
+import { LightningEditor } from "./lightning-editor.js"
 
-// The same pattern runs with implicit whole-value matching in HTML inputs.
-const nonblank = /^\s*\S.*/
-const city = Schema.String.check(Schema.isPattern(nonblank))
-const date = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)).check(
-  Schema.makeFilter((value) => {
-    const day = new Date(`${value}T00:00:00.000Z`)
-    return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === value
-  }, { expected: "a calendar date" }),
-)
+const city = LightningEditor.NonblankText
+const date = LightningEditor.CalendarDate
 
 export const Input = Schema.Struct({
   originCity: city.annotate({ description: "The origin city provided by the user." }),
@@ -53,26 +49,10 @@ type InputPolicy = Partial<Record<InputKey, { is_required?: boolean; is_user_inp
 const inputKeys = ["originCity", "destinationCity", "dateOfTravel"] as const
 const labels = { originCity: "Origin city", destinationCity: "Destination city", dateOfTravel: "Departure date" }
 
-type InputField = {
-  key: InputKey
-  title: string
-  type: "string"
-  required: true
-  format?: "date"
-  placeholder?: string
-  pattern?: string
-  default?: string
-}
+type InputField = LightningEditor.Field<InputKey> & { required: true }
 type InputRequest = { values: Partial<Input>; fields: InputField[] }
 
-const dateField = {
-  key: "dateOfTravel",
-  title: labels.dateOfTravel,
-  type: "string",
-  required: true,
-  format: "date",
-  placeholder: "YYYY-MM-DD",
-} as const satisfies InputField
+const dateField = LightningEditor.standardField("dateOfTravel", "lightning__dateType", labels.dateOfTravel, true)
 const Draft = Schema.Struct({
   originCity: Schema.optionalKey(Schema.Unknown),
   destinationCity: Schema.optionalKey(Schema.Unknown),
@@ -94,8 +74,7 @@ export function prepare(input: unknown, policy: InputPolicy = definition.inputs)
     }
     if (policy[key]?.is_required !== true) return []
     if (!formable(key, policy)) throw new Error(`Missing or invalid input: ${labels[key]}`)
-    if (definition.inputs[key].lightningType === "lightning__dateType") return [dateField]
-    return [{ key, title: labels[key], type: "string", required: true, pattern: nonblank.source }]
+    return [LightningEditor.standardField(key, definition.inputs[key].lightningType, labels[key], true)]
   })
   return { values, fields }
 }
