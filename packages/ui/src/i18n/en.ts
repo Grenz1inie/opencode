@@ -147,6 +147,7 @@ const source = {
   "ui.actionOutput.diagnostic.mcpSchema": "The result did not match the MCP output schema ({{path}}).",
   "ui.actionOutput.diagnostic.actionSchema": "The result did not match the Action output contract ({{path}}).",
   "ui.actionOutput.diagnostic.actionResult": "The Action reported a failure ({{path}}).",
+  "ui.actionOutput.diagnostic.renderer": "The Action renderer could not be loaded ({{path}}).",
   "ui.actionOutput.diagnostic.widget": "Widget output could not be displayed ({{path}}).",
   "ui.messagePart.questions.dismissed": "Questions dismissed",
   "ui.messagePart.compaction": "Session compacted",

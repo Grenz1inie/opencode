@@ -9,7 +9,7 @@ type Projections = { readonly user: Schema.JsonObject; readonly model: Schema.Js
 export type Binding<View> = { view?: View; path?: string; rejectedOutput?: string }
 
 export const Diagnostic = Schema.Struct({
-  stage: Schema.Literals(["call", "structured", "mcpSchema", "actionSchema", "actionResult", "widget"]),
+  stage: Schema.Literals(["call", "structured", "mcpSchema", "actionSchema", "actionResult", "renderer", "widget"]),
   path: Schema.String,
 })
 export type Diagnostic = typeof Diagnostic.Type
@@ -39,7 +39,7 @@ export function project(policies: Readonly<Record<string, Policy>>, validated: S
   }
 }
 
-export function result(projections: Projections, widget?: string | View) {
+export function result(projections: Projections, widget?: string | View, diagnostic?: Diagnostic) {
   const presentation =
     typeof widget === "object" ? { view: widget }
     : widget !== undefined && Object.keys(projections.user).length > 0 ? { widget }
@@ -48,6 +48,7 @@ export function result(projections: Projections, widget?: string | View) {
   return {
     content: JSON.stringify(projections.model),
     metadata: {
+      ...(diagnostic && { actionDiagnostic: diagnostic }),
       actionOutput: {
         outputs: projections.user,
         ...presentation,

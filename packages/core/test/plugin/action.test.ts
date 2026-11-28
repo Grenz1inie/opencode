@@ -9,6 +9,7 @@ import { Tool } from "@opencode/core/tool"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Tool as ToolSchema } from "@opencode/schema/tool"
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { bookingEditor, bookingType } from "../fixture/action-input"
 import { testEffect } from "../lib/effect"
@@ -492,7 +493,7 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
         actions: [
           { ...definition, name: "missing_target", target: "local://unknown" },
           { ...definition, name: "missing_type", inputs: { sampleID: { type: "unknown" } } },
-          { ...definition, name: "missing_widget", widget: "sample/unknown" },
+          { ...definition, name: "missing_output_type", outputs: { receipt: { type: "unknown" } } },
           definition,
         ],
       }),
@@ -504,9 +505,78 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
     expect(received).toEqual([])
     const input = { sampleID: "sample-8" }
     const error = yield* execute(snapshot, input).pipe(Effect.flip)
-    expect(error.message).toBe('Action "inspect_sample" returned invalid outputs')
+    expect(error.message).toBe('Action "inspect_sample" returned invalid outputs at outputs.receipt')
+    expect(error.metadata?.actionDiagnostic).toEqual({ stage: "actionSchema", path: "outputs.receipt" })
     expect(error.metadata?.actionOutput).toBeUndefined()
     expect(received).toEqual([input])
+  }),
+)
+
+it.live("keeps the four named output combinations independent of the renderer and target failures", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const { widget, ...base } = definition
+    const named = {
+      ...base,
+      renderer: "sample/renderer",
+      outputs: {
+        both: { type: "sampleId", is_displayable: true },
+        user: { type: "sampleId", is_displayable: true, filter_from_agent: true },
+        model: { type: "sampleId" },
+        neither: { type: "sampleId", filter_from_agent: true },
+      },
+    } satisfies Definition
+    const values = { both: "BOTH", user: "USER", model: "MODEL", neither: "NEITHER" }
+    const user = { both: values.both, user: values.user }
+    const model = { both: values.both, model: values.model }
+    const namedView = { ...view, body: { definition: "tile/text", attributes: { text: "{!$attrs.both}" } } }
+    yield* plugins.activate([
+      extension("output-contract", {
+        types,
+        targets: {
+          [named.target]: (input) => input.sampleID === "fail"
+            ? Effect.fail(new ToolSchema.Error({ message: values.model, metadata: { actionOutput: { outputs: values } } }))
+            : Effect.succeed({ ...values, undeclared: "UNDECLARED" }),
+        },
+        widgets: { [widget]: namedView, "sample/invalid": { ...namedView, label: "" } },
+        renderers: {
+          [named.renderer]: { type: "sampleId", widget },
+          "sample/bad-widget": { type: "sampleId", widget: "sample/absent" },
+          "sample/bad-type": { type: "receipt", widget },
+        },
+        actions: [
+          named,
+          { ...named, name: "unknown_renderer", renderer: "sample/absent" },
+          { ...named, name: "unknown_widget", renderer: "sample/bad-widget" },
+          { ...named, name: "wrong_renderer_type", renderer: "sample/bad-type" },
+          { ...base, name: "invalid_widget", widget: "sample/invalid", outputs: named.outputs },
+        ],
+      }),
+    ])
+
+    const snapshot = yield* tools.snapshot()
+    const input = { sampleID: "ok" }
+    const result = yield* execute(snapshot, input)
+    expect(result.content).toEqual([{ type: "text", text: JSON.stringify(model) }])
+    expect(result.output).toEqual(model)
+    expect(result.metadata?.actionOutput).toEqual({ outputs: user, view: { ...namedView, id: widget } })
+
+    for (const [name, stage, path] of [
+      ["unknown_renderer", "renderer", "renderers.sample/absent"],
+      ["unknown_widget", "widget", "widgets.sample/absent"],
+      ["wrong_renderer_type", "renderer", "renderers.sample/bad-type.type"],
+      ["invalid_widget", "widget", "widgets.sample/invalid.label"],
+    ] as const) {
+      const fallback = yield* execute(snapshot, input, name)
+      expect(fallback.output).toEqual(model)
+      expect(fallback.metadata).toMatchObject({ actionOutput: { outputs: user }, actionDiagnostic: { stage, path } })
+      expect(fallback.metadata?.actionOutput).not.toHaveProperty("view")
+    }
+
+    const failure = yield* execute(snapshot, { sampleID: "fail" }).pipe(Effect.flip)
+    expect(failure.message).toBe('Action "inspect_sample" failed at target')
+    expect(failure.metadata).toEqual({ actionDiagnostic: { stage: "actionResult", path: "target" } })
   }),
 )
 
