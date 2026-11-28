@@ -8,13 +8,13 @@ const decodeStructured = Schema.decodeUnknownResult(Schema.JsonObject)
 const decodeResults = Schema.decodeUnknownResult(FlightAction.Results)
 
 type OutputSchema = NonNullable<Mcp.Tool["outputSchema"]>
-type Check = (value: Schema.JsonObject) => boolean
+type Check = (value: Schema.Json) => boolean
 const validators = new WeakMap<OutputSchema, Promise<Check>>()
 
 async function compileValidator(schema: OutputSchema) {
   const { DefaultJsonSchemaValidator } = await import("@modelcontextprotocol/client/_shims")
   const check = new DefaultJsonSchemaValidator().getValidator(schema)
-  return (value: Schema.JsonObject) => check(value).valid
+  return (value: Schema.Json) => check(value).valid
 }
 
 function validator(schema: OutputSchema) {
@@ -46,28 +46,30 @@ export const projectMcpAction = Effect.fnUntraced(function* (
   // MCP permits a JSON text copy for compatibility. Registered Actions consume only structuredContent.
   if (result.isError) return yield* mcpActionFailure("call")
 
-  const structured = decodeStructured(result.structured)
-  if (structured._tag === "Failure") return yield* mcpActionFailure("structured")
+  // Salesforce sends the registered Pronto action's single envelope in a list.
+  const array = action.type === "customerReviews" && Array.isArray(result.structured) && result.structured.length === 1
+    ? result.structured
+    : undefined
+  const path = array ? "$.structuredContent[0]" : "$.structuredContent"
+  const structured = decodeStructured(array ? array[0] : result.structured)
+  if (structured._tag === "Failure") return yield* mcpActionFailure("structured", path)
+
+  const parsed = action.type === "customerReviews" ? CustomerReviews.invocable(structured.success, path) : undefined
+  if (parsed && "diagnostic" in parsed && parsed.diagnostic.stage === "actionResult")
+    return yield* mcpActionFailure(parsed.diagnostic.stage, parsed.diagnostic.path)
 
   if (outputSchema) {
+    const value = array && outputSchema.type === "array" ? [structured.success] : structured.success
     yield* Effect.tryPromise({
       try: async () => {
         const check = await validator(outputSchema)
-        if (!check(structured.success)) throw new Error("Invalid MCP output")
+        if (!check(value)) throw new Error("Invalid MCP output")
       },
-      catch: () => {
-        if (action.type === "customerReviews") {
-          const parsed = CustomerReviews.invocable(structured.success)
-          if ("diagnostic" in parsed && parsed.diagnostic.stage === "actionSchema")
-            return mcpActionFailure("mcpSchema", parsed.diagnostic.path)
-        }
-        return mcpActionFailure("mcpSchema")
-      },
+      catch: () => mcpActionFailure("mcpSchema"),
     })
   }
 
-  if (action.type === "customerReviews") {
-    const parsed = CustomerReviews.invocable(structured.success)
+  if (parsed) {
     if ("diagnostic" in parsed) return yield* mcpActionFailure(parsed.diagnostic.stage, parsed.diagnostic.path)
 
     const projections = ActionOutput.project({ ...CustomerReviews.outputs, ...action.outputs }, { reviews: parsed.reviews })

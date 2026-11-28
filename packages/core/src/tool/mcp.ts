@@ -55,7 +55,8 @@ export const layer = Layer.effect(
             for (const tool of discovered) {
               editor.add({
                 name: tool.name,
-                options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
+                // The Pronto card is rendered from the direct tool result's metadata.
+                options: { namespace: namespace(tool.server), codemode: tool.action?.type !== "customerReviews" && tool.codemode !== false },
                 description: tool.description ?? "",
                 input: tool.inputSchema as JsonSchema.JsonSchema,
                 output: (tool.action ? {} : (tool.outputSchema ?? {})) as JsonSchema.JsonSchema,
@@ -74,6 +75,7 @@ export const layer = Layer.effect(
                         name: tool.name,
                         args: (input ?? {}) as Record<string, unknown>,
                         sessionID: context.sessionID,
+                        ...(tool.action?.type === "customerReviews" ? { prontoInvocable: true } : {}),
                       })
                       .pipe(
                         Effect.catchTags({

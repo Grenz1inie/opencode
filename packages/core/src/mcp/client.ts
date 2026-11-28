@@ -5,6 +5,7 @@ import {
   type AuthProvider,
   Client,
   InsufficientScopeError,
+  isCallToolResult,
   OAuthError,
   OAuthErrorCode,
   ProtocolError,
@@ -29,6 +30,7 @@ import {
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
 import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
+import type { StandardSchemaV1 } from "@standard-schema/spec"
 import { SKILLS_EXTENSION_ID, SkillsClient } from "@modelcontextprotocol/client/ext/skills"
 import type { Skill as SdkSkill, SkillFile as SdkSkillFile } from "@modelcontextprotocol/client/ext/skills"
 import {
@@ -280,6 +282,7 @@ export interface Connection {
       readonly name: string
       readonly args?: Record<string, unknown>
       readonly sessionID?: Session.ID
+      readonly prontoInvocable?: boolean
     } & PerRequest,
   ) => Effect.Effect<CallToolResult, Error>
   /** MCP Events, when the connection declared them and negotiated 2026-07-28 with a server that offers them. Experimental; see `Events`. */
@@ -935,30 +938,31 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         ),
       callTool: (input) => {
         const call = Effect.tryPromise({
-          try: (signal) =>
-            client.callTool(
-              {
-                name: input.name,
-                arguments: input.args ?? {},
-                ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-              },
-              {
-                signal: claim(signal, input),
-                timeout: execution,
-                // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
-                // The SDK timeout does not reset on progress; execution is the hard wall.
-                onprogress: () => {},
-                // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
-                // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
-                // a string `$schema`); ours keep the server's values. Leaving out `outputSchema` skips the
-                // SDK's output check: servers return results that miss or break their own schema (Zoom
-                // answers a 204 with nothing), and failing the call would report a completed action as failed.
-                toolDefinition: {
-                  ...(listed.get(input.name) ?? { name: input.name, inputSchema: { type: "object" } }),
-                  outputSchema: undefined,
-                } as CallToolRequestOptions["toolDefinition"],
-              },
-            ),
+          try: (signal) => {
+            const params = {
+              name: input.name,
+              arguments: input.args ?? {},
+              ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
+            }
+            const requestOptions = {
+              signal: claim(signal, input),
+              timeout: execution,
+              // A progress token can keep proxies from closing the response stream. Execution is the hard wall.
+              onprogress: () => {},
+            }
+            if (input.prontoInvocable && !connection.modern)
+              return client.request({ method: "tools/call", params }, prontoToolResult, requestOptions)
+
+            return client.callTool(params, {
+              ...requestOptions,
+              // Always passed, so the SDK never lists tools itself. Leaving out outputSchema skips
+              // the SDK's output check. Registered Actions validate output at their own boundary.
+              toolDefinition: {
+                ...(listed.get(input.name) ?? { name: input.name, inputSchema: { type: "object" } }),
+                outputSchema: undefined,
+              } as CallToolRequestOptions["toolDefinition"],
+            })
+          },
           catch: (error) => error,
         })
         // A modern server rejects headers mirrored from a stale definition before running the tool,
@@ -1077,6 +1081,20 @@ function negotiation(protocol: ConfigMCP.Protocol, startup: number): VersionNego
   // Fail fast on servers that never answer the probe; stdio then falls back in place, HTTP through `negotiate`.
   if (protocol === "auto") return { mode: "auto", probe: { timeoutMs: Math.min(PROBE_TIMEOUT, startup) } }
   return { mode: { pin: protocol } }
+}
+
+// The neutral MCP result type accepts a list, which the legacy wire validator rejects.
+const prontoToolResult: StandardSchemaV1<unknown, SdkCallToolResult> = {
+  "~standard": {
+    version: 1,
+    vendor: "opencode",
+    validate(value) {
+      const result = isRecord(value) && value.structuredContent !== undefined && value.content === undefined
+        ? { ...value, content: [] }
+        : value
+      return isCallToolResult(result) ? { value: result } : { issues: [{ message: "Invalid MCP tool result" }] }
+    },
+  },
 }
 
 function toCallToolResult(result: SdkCallToolResult): CallToolResult {

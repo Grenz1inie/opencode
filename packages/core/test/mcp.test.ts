@@ -10,6 +10,7 @@ import {
   Server,
   WebStandardStreamableHTTPServerTransport,
 } from "@modelcontextprotocol/server"
+import { CustomerReviews } from "@opencode/flight-action"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
@@ -2682,6 +2683,91 @@ testEffect(Layer.empty).effect("flush stops waiting for a hung server when its s
       // Shutting down mid-handshake would wait on the held request.
       Effect.ensuring(Deferred.succeed(gated.release, undefined)),
       Effect.provide(startupRegistry(gated.server.url)),
+    )
+  }),
+)
+
+testEffect(Layer.empty).live("registers Pronto's array response as a direct Action with user-only review data", () =>
+  Effect.gen(function* () {
+    const reviews = CustomerReviews.sample(false)
+    const inputSchema = { type: "object", properties: { fail: { type: "boolean" } } } as const
+    const names: string[] = []
+    const source = yield* resourceServer({
+      tools: [
+        {
+          name: "getCustomerReviews",
+          inputSchema,
+          outputSchema: {
+            type: "object",
+            properties: { outputValues: { type: "object", properties: { reviews: { type: "object" } } } },
+          },
+        },
+        { name: "ordinary", inputSchema },
+      ],
+      respond: async (request) => {
+        if (request.method !== "POST") return
+        const message = await request.clone().json()
+        if (!isJSONRPCRequest(message) || message.method !== "tools/call" || message.params?.name !== "getCustomerReviews")
+          return
+
+        names.push(message.params.name)
+        const args = message.params.arguments
+        const failed = isRecord(args) && args.fail === true
+        const structuredContent = [{
+          actionName: "GetCustomerReviewsAction",
+          isSuccess: true,
+          outputValues: { isSuccess: !failed, message: "Raw Pronto message", reviews: failed ? null : reviews },
+        }]
+        return Response.json({
+          jsonrpc: "2.0",
+          id: message.id,
+          result: { content: [{ type: "text", text: JSON.stringify(structuredContent) }], structuredContent },
+        })
+      },
+    })
+    const config = new ConfigMCP.Remote({
+      type: "remote",
+      protocol: "legacy",
+      url: source.url,
+      oauth: false,
+      experimental: {
+        actions: {
+          getCustomerReviews: { type: "customerReviews", outputs: { reviews: { is_displayable: true, filter_from_agent: true } } },
+        },
+      },
+    })
+
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      yield* registration.flush
+      const snapshot = yield* registry.snapshot()
+      expect(snapshot.definitions.map((definition) => definition.name)).toContain("pronto_getCustomerReviews")
+      expect(codeModeListings(snapshot.codeModeCatalog!).map((listing) => listing.path)).toContain("pronto.ordinary")
+
+      const call = (fail: boolean) => snapshot.execute({
+        sessionID: Session.ID.make("ses_mcp_pronto"),
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call_pronto_" + fail, name: "pronto_getCustomerReviews", input: { fail } },
+      })
+      expect(yield* call(false)).toMatchObject({
+        output: {},
+        content: [{ type: "text", text: "{}" }],
+        metadata: { actionOutput: { widget: CustomerReviews.widget, outputs: { reviews } } },
+      })
+      const failed = yield* Effect.flip(call(true))
+      expect(failed.metadata).toEqual({
+        actionDiagnostic: { stage: "actionResult", path: "$.structuredContent[0].outputValues.isSuccess" },
+        actionOutput: { outputs: {} },
+      })
+      expect(names).toEqual(["getCustomerReviews", "getCustomerReviews"])
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+          ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
+          Mcp.node.replace(resourceMcpLayer(config, undefined, undefined, { name: "pronto" })),
+        ]),
+      ),
     )
   }),
 )

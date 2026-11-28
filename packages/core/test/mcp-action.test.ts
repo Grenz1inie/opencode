@@ -92,19 +92,34 @@ test.each([
   })
 })
 
-test("keeps a field diagnostic when a declared MCP schema rejects the same Pronto field", async () => {
+test("validates the Pronto array when the MCP declaration specifies an array root", async () => {
+  const schema = { type: "array", items: { type: "object", required: ["isSuccess"] } } as const
+  const wrapped = { ...prontoResponse, structured: [envelope] }
+  expect(await Effect.runPromise(projectMcpAction(pronto, schema, wrapped))).toMatchObject({
+    output: { reviews },
+    metadata: { actionOutput: { widget: CustomerReviews.widget } },
+  })
+
+  const multiple = await Effect.runPromise(Effect.flip(projectMcpAction(pronto, schema, {
+    ...wrapped,
+    structured: [envelope, envelope],
+  })))
+  expect(multiple.metadata?.actionDiagnostic).toEqual({ stage: "structured", path: "$.structuredContent" })
+})
+
+test("uses the declared MCP schema's boundary when its contract rejects a Pronto result", async () => {
   const schema = {
     type: "object",
-    properties: { outputValues: { type: "object", properties: { isSuccess: { type: "boolean" } } } },
+    required: ["actionName"],
   } as const
   const invalid = {
     ...prontoResponse,
-    structured: { ...envelope, outputValues: { ...envelope.outputValues, isSuccess: "true" } },
+    structured: { isSuccess: true, outputValues: { isSuccess: true } },
   }
   const error = await Effect.runPromise(Effect.flip(projectMcpAction(pronto, schema, invalid)))
 
   expect(error.metadata).toEqual({
-    actionDiagnostic: { stage: "mcpSchema", path: "$.structuredContent.outputValues.isSuccess" },
+    actionDiagnostic: { stage: "mcpSchema", path: "$.structuredContent" },
     actionOutput: { outputs: {} },
   })
 })
@@ -114,7 +129,11 @@ test("preserves the Pronto failure stage and path without exposing its envelope 
     ...prontoResponse,
     structured: { ...envelope, outputValues: { ...envelope.outputValues, isSuccess: false, reviews: null } },
   }
-  const error = await Effect.runPromise(Effect.flip(projectMcpAction(pronto, undefined, failed)))
+  const schema = {
+    type: "object",
+    properties: { outputValues: { type: "object", properties: { reviews: { type: "object" } } } },
+  } as const
+  const error = await Effect.runPromise(Effect.flip(projectMcpAction(pronto, schema, failed)))
 
   expect(error.metadata).toEqual({
     actionDiagnostic: { stage: "actionResult", path: "$.structuredContent.outputValues.isSuccess" },

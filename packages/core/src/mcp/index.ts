@@ -200,6 +200,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly name: string
     readonly args?: Record<string, unknown>
     readonly sessionID?: Session.ID
+    readonly prontoInvocable?: boolean
   }) => Effect.Effect<ToolResult, NotFoundError | ToolCallError>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly prompts: () => Effect.Effect<Prompt[]>
@@ -1102,7 +1103,12 @@ export const layer = (options?: Options) =>
         callTool: Effect.fn("MCP.callTool")(function* (input) {
           const server = ServerName.make(input.server)
           const call = (connection: McpClient.Connection) =>
-            connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
+            connection.callTool({
+              name: input.name,
+              args: input.args,
+              sessionID: input.sessionID,
+              ...(input.prontoInvocable ? { prontoInvocable: true } : {}),
+            })
           const failed = (owner: string) =>
             Effect.mapError(
               (error: Error) =>
