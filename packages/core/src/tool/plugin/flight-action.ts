@@ -28,6 +28,17 @@ const readMessageID = Schema.decodeUnknownOption(SessionMessage.ID)
 const readView = Schema.decodeUnknownOption(FlightAction.View)
 const readRevision = Schema.decodeUnknownOption(FlightReschedule.Result)
 const readPresentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
+const readResults = Schema.decodeUnknownOption(FlightAction.Results)
+
+function firstOutputs(metadata: Schema.JsonObject | undefined) {
+  if (metadata && Object.hasOwn(metadata, "actionOutput")) {
+    const presentation = Option.getOrUndefined(readPresentation(metadata.actionOutput))
+    return presentation?.widget === FlightAction.widget ? presentation.outputs : undefined
+  }
+
+  const legacy = Option.getOrUndefined(readView(metadata?.flightAction))
+  return legacy ? { results: legacy.attributes } : undefined
+}
 
 function cardKey(card: FlightReschedule.Card) {
   return "flight-date:" + JSON.stringify([card.sessionID, card.messageID, card.callID])
@@ -60,15 +71,18 @@ export const Plugin = {
     const read = Effect.fn("FlightActionTool.readRevision")(function* (key: string) {
       return Option.getOrNull(readRevision(yield* ctx.storage.get(key)))
     })
+    const ownsSession = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const session = yield* sessions.get(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return false
+
+      const location = session.value.location
+      return location.directory === ctx.location.directory && location.workspaceID === ctx.location.workspaceID
+    })
+
     const original = Effect.fn("FlightActionTool.completedCard")(function* (card: FlightReschedule.Card) {
       const sessionID = Option.getOrUndefined(readSessionID(card.sessionID))
       const messageID = Option.getOrUndefined(readMessageID(card.messageID))
-      if (!sessionID || !messageID) return
-
-      const session = yield* sessions.get(sessionID).pipe(Effect.option)
-      if (Option.isNone(session)) return
-      const location = session.value.location
-      if (location.directory !== ctx.location.directory || location.workspaceID !== ctx.location.workspaceID) return
+      if (!sessionID || !messageID || !(yield* ownsSession(sessionID))) return
 
       const message = yield* sessions.message({ sessionID, messageID })
       if (message?.type !== "assistant") return
@@ -78,11 +92,8 @@ export const Plugin = {
       )
       if (tool?.type !== "tool" || tool.state.status !== "completed") return
 
-      const metadata = tool.state.metadata
-      const presentation = Option.getOrUndefined(readPresentation(metadata?.actionOutput))
-      const view = metadata && Object.hasOwn(metadata, "actionOutput")
-        ? presentation?.widget === FlightAction.widget && FlightAction.bind(presentation.outputs).view
-        : Option.getOrUndefined(readView(metadata?.flightAction))
+      const outputs = firstOutputs(tool.state.metadata)
+      const view = outputs && FlightAction.bind(outputs).view
       if (!view) return
 
       return { sessionID, agent: message.agent, view }
@@ -194,6 +205,60 @@ export const Plugin = {
                 Effect.mapError((error) => new ToolFailure({ message: "Permission denied: find_flights", error })),
               )
               return (yield* execute(input, context.id)).tool
+            }),
+        })
+        editor.add({
+          name: "read_flight_result",
+          options: { codemode: false, permission: name },
+          description:
+            "Read the saved result for the most recent completed flight search in this session, including any date change. Use this when the user asks about that result.",
+          input: Schema.Struct({}),
+          execute: (_, context) =>
+            Effect.gen(function* () {
+              yield* permit(Permission.invocation(context)).pipe(
+                Effect.mapError((error) => new ToolFailure({ message: "Permission denied: read_flight_result", error })),
+              )
+
+              if (!(yield* ownsSession(context.sessionID)))
+                return yield* new ToolFailure({ message: "This flight result is unavailable." })
+
+              const limit = 20
+              let after: SessionMessage.ID | undefined
+              while (true) {
+                const messages = yield* sessions
+                  .messages({
+                    sessionID: context.sessionID,
+                    type: "assistant",
+                    order: "desc",
+                    limit,
+                    cursor: after ? { id: after, direction: "next" } : undefined,
+                  })
+                  .pipe(Effect.mapError((error) => new ToolFailure({ message: "Unable to read flight search history", error })))
+
+                for (const message of messages) {
+                  if (message.type !== "assistant") continue
+
+                  const tool = message.content.findLast(
+                    (part): part is SessionMessage.AssistantTool =>
+                      part.type === "tool" && part.name === name && part.state.status === "completed",
+                  )
+                  if (tool?.state.status !== "completed") continue
+
+                  const card = { sessionID: context.sessionID, messageID: message.id, callID: tool.id }
+                  const revision = yield* read(cardKey(card))
+                  const saved = revision?.outputs ?? firstOutputs(tool.state.metadata)
+                  const results = Option.getOrUndefined(readResults(saved?.results))
+                  if (!results) return yield* new ToolFailure({ message: "This flight result is unavailable." })
+
+                  const outputs = ActionOutput.project(FlightAction.definition.outputs, { results })
+                  return { content: JSON.stringify(outputs.model) }
+                }
+
+                after = messages.at(-1)?.id
+                if (messages.length < limit || !after) break
+              }
+
+              return yield* new ToolFailure({ message: "No completed flight search in this session." })
             }),
         })
         editor.add({
