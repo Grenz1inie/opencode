@@ -19,10 +19,10 @@ const orderDate = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)).c
 )
 const decimal = Schema.Number.check(Schema.isFinite())
 const item = Schema.Struct({
-  customerName: Schema.String,
-  rating: decimal,
-  orderDate,
-  comments: Schema.String,
+  customerName: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  rating: Schema.optionalKey(Schema.NullOr(decimal)),
+  orderDate: Schema.optionalKey(Schema.NullOr(orderDate)),
+  comments: Schema.optionalKey(Schema.NullOr(Schema.String)),
 })
 const wrapper = Schema.Struct({ reviewCount: Schema.Int, averageRating: decimal, items: Schema.Array(item) })
 const apexTypes = new Map<string, typeof wrapper | typeof item>([
@@ -89,18 +89,34 @@ function bindAttributes(renderer: typeof override, value: unknown) {
   }
 }
 
-export function bind(outputs: Schema.JsonObject): ActionOutput.Binding<{ definition: string; attributes: typeof wrapper.Type }> {
+export function bind(outputs: Schema.JsonObject): ActionOutput.Binding<{ definition: string; attributes: Schema.JsonObject }> {
   const decoded = decodeOutput(outputs.reviews)
   if (decoded._tag === "Failure")
     return { rejectedOutput: "reviews", path: issuePath(decoded.failure.issue, "$.outputs.reviews") }
 
-  return bindAttributes(override, decoded.success)
+  const bound = bindAttributes(override, decoded.success)
+  if (!bound.view) return bound
+
+  const { definition, attributes } = bound.view
+  return {
+    view: {
+      definition,
+      attributes: {
+        ...attributes,
+        items: attributes.items.map(({ customerName, rating, orderDate, comments }) => ({
+          customerName: customerName ?? "",
+          rating: rating ?? "—",
+          orderDate: orderDate ?? "",
+          comments: comments ?? "",
+        })),
+      },
+    },
+  }
 }
 
 type Invocable = { reviews: typeof wrapper.Type } | { diagnostic: ActionOutput.Diagnostic }
 
-export function invocable(value: unknown): Invocable {
-  const outerPath = "$.structuredContent"
+export function invocable(value: unknown, outerPath = "$.structuredContent"): Invocable {
   const innerPath = outerPath + ".outputValues"
   const outer = decodeEnvelope(value)
   if (outer._tag === "Failure")

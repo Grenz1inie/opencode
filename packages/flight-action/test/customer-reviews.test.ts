@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { CustomerReviews } from "@opencode/flight-action"
+import { CustomerReviews, Widget } from "@opencode/flight-action"
 
 const reviews = {
   reviewCount: 2,
@@ -24,6 +24,19 @@ test("maps the Pronto Invocable envelope to the same review fields as a direct r
   expect(CustomerReviews.invocable({ ...envelope, outputValues: { isSuccess: true, reviews: empty } })).toEqual({
     reviews: empty,
   })
+})
+
+test("keeps reviews with nullable Apex fields renderable without changing their business values", () => {
+  const result = {
+    ...reviews,
+    items: [{ customerName: null, rating: null, orderDate: null, comments: null }, reviews.items[1]!],
+  }
+  const wrapped = CustomerReviews.invocable({ ...envelope, outputValues: { isSuccess: true, reviews: result } })
+  expect(wrapped).toEqual({ reviews: result })
+
+  const bound = CustomerReviews.bind({ reviews: result })
+  expect(bound.view?.attributes.items).toHaveLength(2)
+  expect(() => Widget.render(CustomerReviews.widget, CustomerReviews.resource, bound.view!.attributes)).not.toThrow()
 })
 
 test.each([
