@@ -1,10 +1,20 @@
 import { FlightAction } from "@opencode/flight-action"
-import { FlightWidget } from "@opencode/session-ui/flight-widget"
+import { FlightFailure, FlightWidget } from "@opencode/session-ui/flight-widget"
+import { useI18n } from "@opencode/ui/context/i18n"
+import { Schema } from "effect"
 import { createSignal, For, Show } from "solid-js"
 import { render } from "solid-js/web"
 
+type FlightResult =
+  | { view: FlightAction.View; failure?: never; awaitingRetry?: never }
+  | { failure: FlightAction.Input; view?: never; awaitingRetry?: boolean }
+
+const decodeInput = Schema.decodeUnknownSync(FlightAction.Input)
+
 function Demo() {
-  const [view, setView] = createSignal<FlightAction.View>()
+  const i18n = useI18n()
+  const [result, setResult] = createSignal<FlightResult>()
+  const view = () => result()?.view
   const [status, setStatus] = createSignal("")
   const [pending, setPending] = createSignal<ReturnType<typeof FlightAction.prepare>>()
 
@@ -14,12 +24,18 @@ function Demo() {
     dateOfTravel: "2026-12-05",
   })
 
-  function search(input: ReturnType<typeof FlightAction.prepare>["values"]) {
-    const result = FlightAction.run(input)
-    console.debug("Flight search target invoked", result.tool.content)
-    setView(result.user)
+  function search(query: FlightAction.Input, attempt: FlightAction.Attempt = "search") {
+    setDraft(query)
     setPending(undefined)
     setStatus("")
+    console.debug("Flight search target invoked", { ...query, attempt })
+
+    try {
+      const view = FlightAction.run(query, (saved) => FlightAction.simulate(saved, attempt)).user
+      setResult(view ? { view } : { failure: query })
+    } catch {
+      setResult({ failure: query })
+    }
   }
 
   return (
@@ -40,10 +56,10 @@ function Demo() {
               }
 
               setDraft(next)
-              setView(undefined)
+              setResult(undefined)
               const prepared = FlightAction.prepare(next)
 
-              if (prepared.fields.length === 0) search(prepared.values)
+              if (prepared.fields.length === 0) search(decodeInput(prepared.values))
               else setPending(prepared)
             }}
           >
@@ -73,7 +89,7 @@ function Demo() {
                 return
               }
 
-              search(prepared.values)
+              search(decodeInput(prepared.values), view() ? "reschedule" : "search")
             }}
           >
             <p>{[request().values.originCity, request().values.destinationCity].filter(Boolean).join(" → ")}</p>
@@ -98,6 +114,42 @@ function Demo() {
         )}
       </Show>
       <div role="status">{status()}</div>
+      <Show when={result()?.failure}>
+        {(input) => (
+          <>
+            <FlightFailure
+              input={input()}
+              disabled={result()?.awaitingRetry}
+              onRetry={() => setResult({ failure: input(), awaitingRetry: true })}
+            />
+            <Show when={result()?.awaitingRetry}>
+              <form
+                aria-label={i18n.t("ui.flightAction.retryPermission")}
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") return
+
+                  event.preventDefault()
+                  setResult({ failure: input() })
+                }}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  search(input(), "retry")
+                }}
+              >
+                <p>{i18n.t("ui.flightAction.retryPermission")}</p>
+                <button
+                  type="button"
+                  ref={(button) => queueMicrotask(() => button.focus({ preventScroll: true }))}
+                  onClick={() => setResult({ failure: input() })}
+                >
+                  {i18n.t("ui.permission.deny")}
+                </button>
+                <button type="submit">{i18n.t("ui.permission.allowOnce")}</button>
+              </form>
+            </Show>
+          </>
+        )}
+      </Show>
       <Show when={view()}>
         {(result) => (
           <FlightWidget

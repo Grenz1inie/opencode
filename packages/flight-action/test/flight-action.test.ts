@@ -85,6 +85,44 @@ test("opens a prefilled date request using the registered node and preserves the
   expect(initial.attributes.dateOfTravel).toBe("2026-12-05")
 })
 
+test("an empty flight search can change date without re-running the original search", () => {
+  const empty = { ...trip, dateOfTravel: "2026-12-04" }
+  const calls: unknown[] = []
+  const search = (input: unknown) => FlightAction.run(input, (query) => {
+    calls.push(query)
+    return FlightAction.simulate(query, "search")
+  })
+  const initial = search(empty)
+
+  expect(initial.user?.attributes).toEqual({ ...empty, flights: [] })
+  if (!initial.user) throw new Error("Expected an empty flight result")
+  const change = FlightAction.reschedule(initial.user, FlightAction.changeDate)
+
+  expect(change?.fields[0]?.default).toBe(empty.dateOfTravel)
+  expect(calls).toEqual([empty])
+
+  const dateOfTravel = "2026-12-06"
+  const revised = search({ ...change?.values, dateOfTravel })
+
+  expect(revised.user?.attributes.flights[0]?.fare).toBe(570)
+  expect(calls).toEqual([empty, { ...trip, dateOfTravel }])
+})
+
+test("a failed search can recover on an explicit retry of the same query", () => {
+  const unavailable = { ...trip, dateOfTravel: "2026-12-08" }
+
+  expect(FlightAction.run(unavailable).user?.attributes.flights).toHaveLength(2)
+  expect(() => FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "search"))).toThrow("Flight search failed")
+  expect(() => FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "reschedule"))).toThrow("Flight search failed")
+
+  const recovered = FlightAction.run(unavailable, (input) => FlightAction.simulate(input, "retry"))
+
+  expect(recovered.user?.attributes).toMatchObject({
+    ...unavailable,
+    flights: [{ number: "CA 1741", fare: 560 }, { number: "MU 5495", fare: 620 }],
+  })
+})
+
 test("reports a rejected named value separately from its Widget diagnostic", () => {
   const results = FlightAction.simulate(trip)
   const first = { ...results.flights[0], fare: "560" }

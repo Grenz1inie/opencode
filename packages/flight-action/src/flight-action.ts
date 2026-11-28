@@ -19,7 +19,7 @@ export const Input = Schema.Struct({
   destinationCity: city.annotate({ description: "The destination city provided by the user." }),
   dateOfTravel: date.annotate({ description: "The travel date specified by the user, YYYY-MM-DD. Omit if unknown." }),
 })
-type Input = typeof Input.Type
+export type Input = typeof Input.Type
 
 const Flight = Schema.Struct({
   number: Schema.String,
@@ -117,7 +117,19 @@ export function reschedule(view: View, operation: Widget.Operation | undefined) 
   return { values: { originCity, destinationCity }, fields: [{ ...dateField, default: dateOfTravel }] as const }
 }
 
-export function simulate(input: Input): Results {
+export const retry = { widget, node: "retry-search", definition: "action/sendMessage" } as const satisfies Widget.Operation
+
+export function isRetry(operation: Widget.Operation | undefined) {
+  return operation?.widget === retry.widget && operation.node === retry.node && operation.definition === retry.definition
+}
+
+export type Attempt = "search" | "reschedule" | "retry"
+
+export function simulate(input: Input, attempt?: Attempt): Results {
+  if (attempt && input.dateOfTravel === "2026-12-04") return { ...input, flights: [] }
+
+  if (attempt && input.dateOfTravel === "2026-12-08" && attempt !== "retry") throw new Error("Flight search failed")
+
   return {
     ...input,
     flights: [

@@ -62,7 +62,11 @@ export function createFlightChange(card: () => FlightCard | undefined, unavailab
 
     const target = previous.target
 
-    if (!operation || !FlightAction.reschedule(target.view, operation)) {
+    const view = previous.result ? FlightAction.bind(previous.result.outputs).view : target.view
+    const failed = previous.result ? !!previous.result.failure : !target.view
+    const allowed = view ? FlightAction.reschedule(view, operation) : failed && FlightAction.isRetry(operation)
+
+    if (!operation || !allowed) {
       dispatch({ type: "invalid", target, error: unavailable() })
 
       return
@@ -78,10 +82,10 @@ export function createFlightChange(card: () => FlightCard | undefined, unavailab
       ),
     ).then(
       (result) => {
-        // The mutation response can arrive after another tab saved a later revision.
+        // Reconcile with storage in case another tab saved a later revision.
         if (result) read(target)
 
-        dispatch({ type: "settled", target, attempt })
+        dispatch({ type: "settled", target, attempt, result, baseRevision: previous.result?.revision })
       },
       () => dispatch({ type: "settled", target, attempt, error: unavailable() }),
     )

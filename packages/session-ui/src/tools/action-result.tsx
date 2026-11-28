@@ -5,7 +5,7 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { useData } from "../context"
 import { ActionWidget, renderActionWidget, type WidgetActions } from "./action-widget"
 import { createFlightChange } from "./flight-change"
-import { FlightWidget } from "./flight-widget"
+import { FlightFailure, FlightWidget } from "./flight-widget"
 import type { ToolProps } from "./tool-renderer"
 
 const presentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
@@ -13,6 +13,8 @@ const presentation = Schema.decodeUnknownOption(ActionOutput.Presentation)
 const readDiagnostic = Schema.decodeUnknownOption(ActionOutput.Diagnostic)
 
 const legacyView = Schema.decodeUnknownOption(FlightAction.View)
+
+const readFlightFailure = Schema.decodeUnknownOption(FlightAction.Input)
 
 export function ActionResult(
   props: Pick<ToolProps, "tool" | "status" | "metadata" | "sessionID" | "messageID" | "callID">,
@@ -27,6 +29,12 @@ export function ActionResult(
       : undefined,
   )
 
+  const flightFailure = createMemo(() =>
+    props.tool === FlightAction.definition.name && props.status === "error"
+      ? Option.getOrUndefined(readFlightFailure(props.metadata.flightFailure))
+      : undefined,
+  )
+
   const card = createMemo(() => {
     const host = data.flightReschedule
     const sessionID = props.sessionID ?? data.sessionID
@@ -34,20 +42,28 @@ export function ActionResult(
 
     if (
       !host || !data.flag("flight_action") || !sessionID || !props.messageID || !props.callID ||
-      props.tool !== FlightAction.definition.name || props.status !== "completed"
+      props.tool !== FlightAction.definition.name || (props.status !== "completed" && !flightFailure())
     ) return
 
     const view = current?.widget === FlightAction.widget ? FlightAction.bind(current.outputs).view : legacy()
 
-    if (view) return { host, card: { sessionID, messageID: props.messageID, callID: props.callID }, view }
+    if (view || flightFailure()) return { host, card: { sessionID, messageID: props.messageID, callID: props.callID }, view }
   })
 
   const change = createFlightChange(card, () => i18n.t("ui.flightAction.unavailable"))
 
+  const currentFailure = createMemo(() => {
+    const revised = change.view().result
+
+    return revised ? Option.getOrUndefined(readFlightFailure(revised.failure)) : flightFailure()
+  })
+
   const result = createMemo(() => {
     const revised = change.view().result
 
-    return revised ? { widget: FlightAction.widget, outputs: revised.outputs } : initial()
+    if (!revised) return initial()
+
+    return revised.failure ? undefined : { widget: FlightAction.widget, outputs: revised.outputs }
   })
 
   const actions = createMemo<WidgetActions | undefined>(() => {
@@ -66,7 +82,7 @@ export function ActionResult(
   const widget = createMemo(() => {
     const item = result()
 
-    return item ? renderActionWidget(item.widget, item.outputs, props.tool) : undefined
+    return item ? renderActionWidget(item.widget, item.outputs, props.tool, i18n.t("ui.flightAction.empty")) : undefined
   })
 
   const widgetLabel = () => widget()?.label
@@ -95,7 +111,21 @@ export function ActionResult(
         <Match when={props.status === "streaming" || props.status === "running"}>
           <span role="status">{i18n.t("ui.actionOutput.pending")}</span>
         </Match>
-        <Match when={props.status !== "completed"}>
+        <Match when={currentFailure()}>
+          {(input) => (
+            <>
+              <FlightFailure
+                input={input()}
+                disabled={!change.view().available || change.view().busy}
+                onRetry={card() ? () => change.run(FlightAction.retry) : undefined}
+              />
+              <Show when={change.view().error}>
+                {(message) => <p role="alert">{message()}</p>}
+              </Show>
+            </>
+          )}
+        </Match>
+        <Match when={props.status !== "completed" && !change.view().result}>
           <Show when={failure()} fallback={<span role="status">{i18n.t("ui.actionOutput.failed")}</span>}>
             {(item) => (
               <>

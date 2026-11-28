@@ -468,6 +468,34 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
 })
 
+test("cancels flight retry permission with Escape", async ({ page }) => {
+  const replies: unknown[] = []
+
+  await mockServer(page, {
+    onPermissionReply: (reply) => replies.push(reply),
+    sessionPermissions: {
+      [sessionID]: [{
+        id: "flight-retry-permission",
+        sessionID,
+        permission: "find_flights",
+        patterns: ["*"],
+        metadata: { operation: "retry", input: { dateOfTravel: "2026-12-08" } },
+        always: [],
+      }],
+    },
+  })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const deny = permission.getByRole("button", { name: "Deny" })
+
+  await expect(deny).toBeFocused()
+  await deny.press("Escape")
+  await expect(permission).toHaveCount(0)
+  expect(replies).toEqual([{ sessionID, permissionID: "flight-retry-permission", body: { decision: "reject" } }])
+})
+
 test("sends one permission reply and closes the dock when it lands, before permission.replied", async ({ page }) => {
   await mockServer(page, {
     sessionPermissions: {
