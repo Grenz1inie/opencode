@@ -11,6 +11,8 @@ import { Agent } from "../agent.js"
 import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
 import { Automation } from "../automation.js"
+import { Config } from "../config.js"
+import { Flag } from "../flag.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Environment } from "../environment/index.js"
@@ -31,6 +33,7 @@ import { Rpc } from "../rpc.js"
 import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
+import { ActionTool } from "../tool/action.js"
 import { Workspace } from "../workspace.js"
 import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
@@ -61,6 +64,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const providers = yield* Provider.Service
   const models = yield* Model.Service
   const commands = yield* Command.Service
+  const config = yield* Config.Service
+  const flags = yield* Flag.Service
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
@@ -288,6 +293,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       }) as Plugin.Context["event"]["subscribe"],
     },
     experimental: {
+      action: {
+        register: (catalog) =>
+          ActionTool.register(catalog, { config, flags, tool: context.tool, event: context.event, permission: context.permission }),
+      },
       terminal: {
         read: (input) => persistentPty.read(input.sessionID, input.lines),
       },
@@ -657,6 +666,8 @@ export const requirements = LayerNode.group([
   Provider.node,
   Model.node,
   Command.node,
+  Config.node,
+  Flag.node,
   Bus.node,
   Integration.node,
   KV.node,
