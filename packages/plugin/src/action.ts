@@ -11,6 +11,19 @@ export interface InputField extends Field {
   readonly is_user_input?: boolean
 }
 
+export interface EditorField {
+  readonly path: readonly [string, ...string[]]
+  readonly type: "lightning__textType" | "lightning__dateType"
+  readonly title: string
+  readonly required?: boolean
+}
+
+export interface Editor {
+  readonly definition: string
+  readonly title: string
+  readonly fields: readonly [EditorField, ...EditorField[]]
+}
+
 export interface Definition {
   readonly name: string
   readonly description: string
@@ -28,6 +41,8 @@ export interface Catalog {
   readonly actions: readonly Definition[]
   readonly targets: Readonly<Record<string, Target>>
   readonly types: Readonly<Record<string, Schema.Codec<Schema.Json, Schema.Json>>>
+  /** Editors keyed by input type and then by channel, such as `lightningDesktopGenAi`. */
+  readonly editors?: Readonly<Record<string, Readonly<Record<string, Editor>>>>
   readonly widgets?: Readonly<Record<string, WidgetResource.Definition>>
 }
 

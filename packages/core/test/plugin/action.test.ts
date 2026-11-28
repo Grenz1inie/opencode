@@ -145,6 +145,100 @@ it.live("collects only missing or invalid required input and runs the target onc
   }),
 )
 
+it.live("reuses a named Editor for two Actions and validates the complete nested object before settling", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const forms = yield* Form.Service
+    const calls: Array<{ action: string; input: Schema.JsonObject }> = []
+    const booking = Schema.Struct({
+      facility: Schema.String,
+      slot: Schema.Struct({
+        date: Schema.String,
+        code: Schema.String.check(Schema.isPattern(/^CAL-\d+$/)),
+        duration: Schema.Number,
+      }),
+    }).annotate({ identifier: "CalibrationBooking" })
+    const names = ["record_calibration", "review_calibration"] as const
+    const actions = names.map((name) => ({
+      ...definition,
+      name,
+      target: "local://" + name,
+      inputs: { booking: { type: "calibrationBooking", is_required: true, is_user_input: true } },
+    }))
+    yield* plugins.activate([
+      extension("named-action-input", {
+        types: { ...types, calibrationBooking: booking },
+        editors: {
+          calibrationBooking: {
+            lightningDesktopGenAi: {
+              definition: "fixture/calibration-editor",
+              title: "Calibration details",
+              fields: [
+                { path: ["facility"], type: "lightning__textType", title: "Facility", required: true },
+                { path: ["slot", "date"], type: "lightning__dateType", title: "Calibration date", required: true },
+                { path: ["slot", "code"], type: "lightning__textType", title: "Calibration code", required: true },
+              ],
+            },
+            lightningMobile: {
+              definition: "fixture/mobile-editor",
+              title: "Mobile editor",
+              fields: [{ path: ["facility"], type: "lightning__textType", title: "Other facility", required: true }],
+            },
+          },
+        },
+        targets: Object.fromEntries(actions.map(({ name, target }) => [
+          target,
+          (input: Schema.JsonObject) => Effect.sync(() => {
+            calls.push({ action: name, input })
+            return { receipt: { sampleID: "calibration", marker: name }, note: "ok" }
+          }),
+        ])),
+        widgets: { [definition.widget]: view },
+        actions,
+      }),
+    ])
+
+    const snapshot = yield* tools.snapshot()
+    const known = { facility: " North Lab ", slot: { code: "CAL-418", duration: 40 } }
+    for (const [index, { name }] of actions.entries()) {
+      expect(snapshot.definitions.find((tool) => tool.name === name)?.inputSchema).toMatchObject({
+        properties: { booking: { properties: { slot: { required: ["duration"] } } } },
+      })
+      const { form, fiber } = yield* openForm(execute(snapshot, { booking: known }, name))
+      expect(form.title).toBe("Calibration details")
+      expect(form.metadata?.editor).toEqual({ channel: "lightningDesktopGenAi", definition: "fixture/calibration-editor" })
+      expect(form.fields).toEqual([
+        expect.objectContaining({ key: "booking.facility", default: " North Lab " }),
+        expect.objectContaining({ key: "booking.slot.date", format: "date" }),
+        expect.objectContaining({ key: "booking.slot.code", default: "CAL-418" }),
+      ])
+      expect(calls).toHaveLength(index)
+      const answer = {
+        "booking.facility": index ? "South Lab" : " North Lab ",
+        "booking.slot.date": "2027-06-06",
+        "booking.slot.code": "wrong",
+      }
+      expect((yield* forms.reply({ id: form.id, answer }).pipe(Effect.flip)).message).toEndWith("booking.slot.code")
+      expect(yield* forms.state(form.id)).toEqual({ status: "pending" })
+      expect(calls).toHaveLength(index)
+      yield* forms.reply({ id: form.id, answer: { ...answer, "booking.slot.code": "CAL-501" } })
+      yield* Fiber.join(fiber)
+      expect(calls[index]).toEqual({
+        action: name,
+        input: { booking: {
+          facility: answer["booking.facility"],
+          slot: { code: "CAL-501", date: "2027-06-06", duration: 40 },
+        } },
+      })
+    }
+    const unavailable = yield* execute(snapshot, { booking: { facility: "North Lab" } }, names[0]).pipe(Effect.flip)
+    expect(unavailable.message).toEndWith("booking.slot.duration")
+    expect(yield* forms.list()).toEqual([])
+    expect(calls).toHaveLength(2)
+  }),
+)
+
 it.live("registers Actions as ordinary scoped tools and restores a shadowed registration on unload", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

@@ -166,7 +166,7 @@ const validateStandard = (
     }),
   )
 
-const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
+export const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
   if (isStandardSchema(schema)) return standardJsonSchema(schema, "input")
   if (!Schema.isSchema(schema)) return schema
