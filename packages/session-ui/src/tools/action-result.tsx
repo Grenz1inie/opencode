@@ -88,6 +88,7 @@ export function ActionResult(
   })
 
   const widgetLabel = () => widget()?.title ?? i18n.t(widget()?.label ?? "ui.actionOutput.completed")
+
   const reported = createMemo(() => {
     const diagnostic = Option.getOrUndefined(readDiagnostic(props.metadata.actionDiagnostic))
 
@@ -101,19 +102,23 @@ export function ActionResult(
   })
 
   const output = createMemo(() => visible().length ? JSON.stringify(Object.fromEntries(visible()), null, 2) : undefined)
-  const empty = createMemo(() => visible().length > 0 && visible().every(([, value]) =>
-    Array.isArray(value) && value.length === 0,
-  ))
 
-  const diagnostic = () => {
-    if (reported()) return reported()
+  const empty = createMemo(() => {
+    const lists = visible().flatMap(([, value]) => Array.isArray(value) ? [value] : [])
+
+    return lists.length > 0 && lists.every((items) => items.length === 0)
+  })
+
+  const diagnostic = createMemo(() => {
+    const message = reported()
+    if (message) return message
 
     const path = Object.hasOwn(props.metadata, "actionOutput") && !result()
       ? "$.metadata.actionOutput"
       : widget()?.diagnostic
 
     return path && i18n.t("ui.actionOutput.invalid", { path })
-  }
+  })
 
   return (
     <div data-component="action-result">

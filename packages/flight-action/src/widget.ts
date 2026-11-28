@@ -21,8 +21,8 @@ const textAttributes: Readonly<Record<string, readonly string[]>> = {
   "tile/column": ["gap"],
   "tile/row": ["gap", "justify", "align"],
   "tile/text": ["text", "variant", "color", "weight"],
-  "tile/icon": ["name", "alt"],
-  "tile/separator": [],
+  "tile/icon": ["name", "alt", "size", "color"],
+  "tile/separator": ["orientation"],
   "tile/button": ["label"],
 }
 
@@ -71,10 +71,13 @@ export function render(resource: string, node: Node, attributes: Scope): Rendere
 function expand(resource: string, node: Node, scope: Scope, path: string): Rendered[] {
   const keys = Object.hasOwn(textAttributes, node.definition) ? textAttributes[node.definition] : undefined
   if (!keys) throw new BindingError(resource, path + ".definition", "Unsupported tile")
-  for (const key of keys) {
-    const value = node.attributes?.[key]
-    if (value !== undefined && typeof value !== "string") {
-      throw new BindingError(resource, path + ".attributes." + key, "Expected a string")
+  for (const [key, value] of Object.entries(node.attributes ?? {})) {
+    const attribute = path + ".attributes." + key
+    if (node.definition === "tile/button" && key === "actions") {
+      if (Option.isNone(click(value))) throw new BindingError(resource, attribute, "Invalid button actions")
+    } else {
+      if (!keys.includes(key)) throw new BindingError(resource, attribute, "Unsupported attribute")
+      if (value !== undefined && typeof value !== "string") throw new BindingError(resource, attribute, "Expected a string")
     }
   }
   const scopes = node.meta?.forEach === undefined

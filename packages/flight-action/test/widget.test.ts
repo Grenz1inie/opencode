@@ -52,4 +52,8 @@ test("locates an invalid rendered component attribute without exposing its value
     definition: "tile/widget",
     children: [{ definition: "tile/text", attributes: { text: { data: "PRIVATE_ATTRIBUTE" } } }],
   }, {})).toThrow("sample/attributes · $.children[0].attributes.text: Expected a string")
+  expect(() => Widget.render("sample/attributes", {
+    definition: "tile/text",
+    attributes: { txt: "misspelled" },
+  }, {})).toThrow("sample/attributes · $.attributes.txt: Unsupported attribute")
 })

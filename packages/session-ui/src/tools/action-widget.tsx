@@ -132,7 +132,7 @@ function renderTree(render: () => Widget.Rendered) {
   } catch (error) {
     if (!(error instanceof Widget.BindingError)) throw error
 
-    return { diagnostic: error.message }
+    return { diagnostic: `${error.resource} · ${error.path}` }
   }
 }
 

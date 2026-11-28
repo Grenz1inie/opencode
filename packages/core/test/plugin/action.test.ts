@@ -9,7 +9,6 @@ import { Tool } from "@opencode/core/tool"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
-import { Tool as ToolSchema } from "@opencode/schema/tool"
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { bookingEditor, bookingType } from "../fixture/action-input"
 import { testEffect } from "../lib/effect"
@@ -481,11 +480,12 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
 
     yield* plugins.activate([
       extension("invalid-action-catalog", {
-        types,
+        types: { ...types, counts: Schema.Record(Schema.String, Schema.Number) },
         targets: {
           [definition.target]: (input) =>
             Effect.sync(() => {
               received.push(input)
+              if (input.sampleID === "record") return { receipt: { PRIVATE_RECORD_KEY: "invalid count" } }
               return { receipt: { marker: 123 }, undeclared: "SECRET" }
             }),
         },
@@ -494,6 +494,7 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
           { ...definition, name: "missing_target", target: "local://unknown" },
           { ...definition, name: "missing_type", inputs: { sampleID: { type: "unknown" } } },
           { ...definition, name: "missing_output_type", outputs: { receipt: { type: "unknown" } } },
+          { ...definition, name: "dynamic_record", outputs: { receipt: { type: "counts" } } },
           definition,
         ],
       }),
@@ -505,10 +506,14 @@ it.live("skips Actions with unresolved references and rejects invalid results fr
     expect(received).toEqual([])
     const input = { sampleID: "sample-8" }
     const error = yield* execute(snapshot, input).pipe(Effect.flip)
-    expect(error.message).toBe('Action "inspect_sample" returned invalid outputs at outputs.receipt')
-    expect(error.metadata?.actionDiagnostic).toEqual({ stage: "actionSchema", path: "outputs.receipt" })
+    expect(error.message).toBe('Action "inspect_sample" returned invalid outputs at outputs.receipt.sampleID')
+    expect(error.metadata?.actionDiagnostic).toEqual({ stage: "actionSchema", path: "outputs.receipt.sampleID" })
     expect(error.metadata?.actionOutput).toBeUndefined()
     expect(received).toEqual([input])
+
+    const recordError = yield* execute(snapshot, { sampleID: "record" }, "dynamic_record").pipe(Effect.flip)
+    expect(recordError.metadata?.actionDiagnostic).toEqual({ stage: "actionSchema", path: "outputs.receipt" })
+    expect(recordError.message).not.toContain("PRIVATE_RECORD_KEY")
   }),
 )
 
@@ -535,9 +540,12 @@ it.live("keeps the four named output combinations independent of the renderer an
       extension("output-contract", {
         types,
         targets: {
-          [named.target]: (input) => input.sampleID === "fail"
-            ? Effect.fail(new ToolSchema.Error({ message: values.model, metadata: { actionOutput: { outputs: values } } }))
-            : Effect.succeed({ ...values, undeclared: "UNDECLARED" }),
+          [named.target]: (input) => {
+            if (input.sampleID === "defect") throw new Error(values.model)
+            if (input.sampleID === "fail")
+              return Effect.fail(new Tool.Error({ message: values.model, metadata: { actionOutput: { outputs: values } } }))
+            return Effect.succeed({ ...values, undeclared: "UNDECLARED" })
+          },
         },
         widgets: { [widget]: namedView, "sample/invalid": { ...namedView, label: "" } },
         renderers: {
@@ -574,9 +582,11 @@ it.live("keeps the four named output combinations independent of the renderer an
       expect(fallback.metadata?.actionOutput).not.toHaveProperty("view")
     }
 
-    const failure = yield* execute(snapshot, { sampleID: "fail" }).pipe(Effect.flip)
-    expect(failure.message).toBe('Action "inspect_sample" failed at target')
-    expect(failure.metadata).toEqual({ actionDiagnostic: { stage: "actionResult", path: "target" } })
+    for (const sampleID of ["fail", "defect"]) {
+      const failure = yield* execute(snapshot, { sampleID }).pipe(Effect.flip)
+      expect(failure.message).toBe('Action "inspect_sample" failed at target')
+      expect(failure.metadata).toEqual({ actionDiagnostic: { stage: "actionResult", path: "target" } })
+    }
   }),
 )
 

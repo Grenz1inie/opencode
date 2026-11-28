@@ -5,7 +5,7 @@ import type { Catalog, Definition } from "@opencode/plugin/action"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ActionConfirmation } from "@opencode/schema/form"
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Exit, Result, Schema, SchemaIssue, Scope } from "effect"
+import { Effect, Exit, Result, Schema, SchemaAST, SchemaIssue, Scope } from "effect"
 import { ConfigEntryObserver } from "../config/plugin/entry-observer.js"
 import { Form } from "../form.js"
 import { Permission } from "../permission.js"
@@ -70,6 +70,11 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
   )
   const presentation = resolveView(catalog, definition)
   const action = normalizedName(definition)
+  const targetFailure = () => new Tool.Error({
+    message: `Action "${definition.name}" failed at target`,
+    metadata: { actionDiagnostic: { stage: "actionResult", path: "target" } },
+  })
+
   const requireAvailable = (context: Tool.RequestContext) =>
     available
       ? available(context).pipe(Effect.flatMap((allowed) =>
@@ -122,18 +127,24 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
         yield* host.assertNotDenied(permission).pipe(
           Effect.mapError((error) => new Tool.Error({ message: error.message, error })),
         )
-        const raw = yield* target(bound ? { ...values, ...bound } : values, context).pipe(
-          Effect.mapError(() => new Tool.Error({
-            message: `Action "${definition.name}" failed at target`,
-            metadata: { actionDiagnostic: { stage: "actionResult", path: "target" } },
-          })),
+
+        const targetContext: Tool.Context = {
+          ...context,
+          // Progress can survive in failed tool parts. Only the host publishes Action result fields.
+          progress: ({ actionOutput: _output, actionDiagnostic: _diagnostic, output: _text, ...metadata }) =>
+            context.progress({ ...metadata, actionOutput: { outputs: {} } }),
+        }
+        const raw = yield* Effect.suspend(() => target(bound ? { ...values, ...bound } : values, targetContext)).pipe(
+          Effect.mapError(targetFailure),
+          Effect.catchDefect((cause) =>
+            cause instanceof Form.CancelledError || cause instanceof Permission.DeclinedError
+              ? Effect.die(cause)
+              : targetFailure(),
+          ),
         )
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(
           Effect.mapError(({ issue }) => {
-            const [field] = issuePath(issue)
-            const path = typeof field === "string" && Object.hasOwn(definition.outputs, field)
-              ? `outputs.${field}`
-              : "outputs"
+            const path = outputIssuePath(output.ast, firstIssuePath(issue))
             return new Tool.Error({
               message: `Action "${definition.name}" returned invalid outputs at ${path}`,
               metadata: { actionDiagnostic: { stage: "actionSchema", path } },
@@ -146,10 +157,34 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
   }
 })
 
-function issuePath(issue: SchemaIssue.Issue) {
+function firstIssuePath(issue: SchemaIssue.Issue) {
   return (formatIssues(issue).issues[0]?.path ?? []).map((segment) =>
     typeof segment === "object" ? segment.key : segment,
   )
+}
+
+function declaredMember(ast: SchemaAST.AST, key: PropertyKey): SchemaAST.AST | undefined {
+  if (SchemaAST.isObjects(ast)) return ast.propertySignatures.find((field) => field.name === key)?.type
+  if (SchemaAST.isArrays(ast) && typeof key === "number") return ast.elements[key] ?? ast.rest[0]
+  if (SchemaAST.isSuspend(ast)) return declaredMember(ast.thunk(), key)
+  if (SchemaAST.isUnion(ast)) {
+    for (const member of ast.types) {
+      const field = declaredMember(member, key)
+      if (field) return field
+    }
+  }
+}
+
+function outputIssuePath(ast: SchemaAST.AST, segments: readonly PropertyKey[]) {
+  let path = "outputs"
+  for (const segment of segments) {
+    const member = declaredMember(ast, segment)
+    // Keys from a returned record can themselves be output data.
+    if (!member) break
+    path += typeof segment === "number" ? `[${segment}]` : "." + String(segment)
+    ast = member
+  }
+  return path
 }
 
 function resolveView(catalog: Catalog, definition: Definition): {
@@ -175,7 +210,7 @@ function resolveView(catalog: Catalog, definition: Definition): {
   const decoded = decodeView({ ...resource, id: widget })
   return Result.isSuccess(decoded)
     ? { view: decoded.success }
-    : { diagnostic: { stage: "widget", path: [path, ...issuePath(decoded.failure.issue)].map(String).join(".") } }
+    : { diagnostic: { stage: "widget", path: [path, ...firstIssuePath(decoded.failure.issue)].map(String).join(".") } }
 }
 
 const outputFields = Effect.fnUntraced(function* (catalog: Catalog, entries: Definition["outputs"]) {

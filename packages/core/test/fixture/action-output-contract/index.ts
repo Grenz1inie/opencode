@@ -31,9 +31,14 @@ const target: Target = (input, context) =>
       neither: "ARCHIVE_NEITHER_" + batch,
     }
     if (batch === "EXECUTION") {
+      yield* context.progress({
+        output: outputs.forModel,
+        actionOutput: { outputs },
+        actionDiagnostic: { stage: "widget", path: outputs.forModel },
+      })
       return yield* new Tool.Error({ message: outputs.forModel, metadata: { actionOutput: { outputs } } })
     }
-    if (batch === "STRUCTURE") return { ...outputs, shared: { invalid: outputs.forModel } }
+    if (batch === "STRUCTURE") return { ...outputs, shared: [{ marker: { invalid: outputs.forModel } }] }
     return outputs
   })
 
