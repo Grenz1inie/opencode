@@ -1250,6 +1250,7 @@ export function placeFacts(
 }
 
 const placeFactKeys = [
+  "actionResult",
   "name",
   "tool",
   "mode",
