@@ -1,4 +1,6 @@
 import { expect } from "bun:test"
+import { Agent } from "@opencode/core/agent"
+import { Flag } from "@opencode/core/flag"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -6,6 +8,7 @@ import { PluginPromise } from "@opencode/core/plugin/promise"
 import { Tool } from "@opencode/core/tool"
 import type { PermissionDomain } from "@opencode/plugin/promise/permission"
 import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Cause, Effect, Exit, Layer, Option } from "effect"
 import { testEffect } from "../lib/effect"
 import { makePluginTestLayer } from "./fixture"
@@ -26,7 +29,10 @@ const permission = Layer.succeed(
       if (input.action === "declined") return Effect.die(new Permission.DeclinedError())
       return Effect.void
     },
-    assertNotDenied: () => Effect.void,
+    assertNotDenied: (input) =>
+      input.action === "late_policy"
+        ? Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }))
+        : Effect.void,
     allows: () => Effect.succeed(false),
     reply: () => Effect.void,
     get: () => Effect.succeed(undefined),
@@ -36,8 +42,55 @@ const permission = Layer.succeed(
   }),
 )
 
-const it = testEffect(makePluginTestLayer(permission))
+const it = testEffect(makePluginTestLayer(permission).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "action_ui"))))
 const sessionID = Session.ID.make("ses_plugin_permission")
+
+it.live("rejects an Action when host permission has changed after its approval", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    let calls = 0
+    yield* plugins.activate([
+      {
+        id: "action-permission",
+        revision: "1",
+        effect: (context) =>
+          context.experimental.action
+            .register({
+              actions: [
+                {
+                  name: "late_policy",
+                  description: "Use current host permissions",
+                  target: "local://policy",
+                  inputs: {},
+                  outputs: {},
+                },
+              ],
+              types: {},
+              targets: {
+                "local://policy": () =>
+                  Effect.sync(() => {
+                    calls++
+                    return {}
+                  }),
+              },
+            })
+            .pipe(Effect.asVoid),
+      },
+    ])
+    const snapshot = yield* tools.snapshot()
+    const result = yield* snapshot
+      .execute({
+        sessionID,
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_action"),
+        call: { type: "tool-call", id: "call_policy", name: "late_policy", input: {} },
+      })
+      .pipe(Effect.flip)
+    expect(result.message).toBe("Permission denied: late_policy")
+    expect(calls).toBe(0)
+  }),
+)
 
 it.live("Effect plugins assert permissions and receive outcomes as tool errors", () =>
   Effect.gen(function* () {

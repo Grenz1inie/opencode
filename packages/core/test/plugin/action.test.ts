@@ -4,6 +4,7 @@ import { Bus } from "@opencode/core/bus"
 import { Flag } from "@opencode/core/flag"
 import { Form } from "@opencode/core/form"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
 import { Tool } from "@opencode/core/tool"
 import type { Catalog, Definition } from "@opencode/plugin/action"
 import { Session } from "@opencode/schema/session"
@@ -77,6 +78,8 @@ it.live("advertises an Action only for an eligible session and rechecks captured
     const tools = yield* Tool.Service
     const sessionID = Session.ID.make("ses_action")
     const agent = Agent.ID.make("build")
+    const host = yield* PluginHost.make(plugins, "setup-action-session")
+    yield* host.session.create({ id: sessionID, metadata: { workspace: "lab:ses_action" } })
     const eligible = new Set([sessionID])
     const received: Schema.JsonObject[] = []
     const action = {
@@ -88,7 +91,8 @@ it.live("advertises an Action only for an eligible session and rechecks captured
           type: "sampleId",
           is_required: true,
           is_user_input: true,
-          bind: ({ sessionID }) => Effect.succeed("lab:" + sessionID),
+          bind: ({ sessionMetadata }) =>
+            Effect.succeed(typeof sessionMetadata?.workspace === "string" ? sessionMetadata.workspace : undefined),
         },
       },
     } satisfies Definition
@@ -125,6 +129,37 @@ it.live("advertises an Action only for an eligible session and rechecks captured
     const stale = yield* execute(active, { sampleID: "CAL-29" }).pipe(Effect.flip)
     expect(stale.message).toContain("not currently available")
     expect(received).toHaveLength(1)
+  }),
+)
+
+it.live("never substitutes model input for an absent optional binding", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const host = yield* PluginHost.make(plugins, "setup-action-session")
+    yield* host.session.create({ id: Session.ID.make("ses_action") })
+    const received: Schema.JsonObject[] = []
+    const action = {
+      name: "bound_only",
+      description: "Inspect the bound workspace if present.",
+      target: "local://bound-only",
+      inputs: { workspace: { type: "sampleId", bind: () => Effect.undefined } },
+      outputs: {},
+    } satisfies Definition
+    yield* plugins.activate([
+      extension("bound-only", {
+        actions: [action],
+        types,
+        targets: {
+          [action.target]: (input) => Effect.sync(() => {
+            received.push(input)
+            return {}
+          }),
+        },
+      }),
+    ])
+    yield* execute(yield* tools.snapshot(), { workspace: "model-supplied" }, action.name)
+    expect(received).toEqual([{}])
   }),
 )
 
@@ -224,6 +259,8 @@ it.live("waits for explicit business confirmation, and rechecks availability aft
     const tools = yield* Tool.Service
     const forms = yield* Form.Service
     const received: Schema.JsonObject[] = []
+    const host = yield* PluginHost.make(plugins, "setup-action-session")
+    yield* host.session.create({ id: Session.ID.make("ses_action") })
     let available = true
     const action = {
       ...definition,

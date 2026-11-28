@@ -171,10 +171,12 @@ export function compile(
     ),
   )
   if (!controls.length) {
+    const supplied = new Set(entries.map(({ name }) => name))
     return Result.succeed({
       schema: advertised,
       collects: false,
-      prepare: (input: Schema.JsonObject) => Effect.succeed(input),
+      prepare: (input: Schema.JsonObject) =>
+        Effect.succeed(bind ? Object.fromEntries(Object.entries(input).filter(([name]) => supplied.has(name))) : input),
       ...(bind && { bind }),
     })
   }

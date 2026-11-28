@@ -529,6 +529,10 @@ function register(id: string, tool: Tool.Info): Result.Result<ToolDefinition, Re
     return Result.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
   if (!defaultCodeMode(tool) && id === "execute")
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+  if (tool.available !== undefined && typeof tool.available !== "function")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: available must be a function` }),
+    )
   // Standard Schema libraries such as ArkType make schemas that are functions.
   if (!isSchemaValue(tool.input))
     return Result.fail(

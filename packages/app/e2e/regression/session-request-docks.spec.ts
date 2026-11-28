@@ -623,7 +623,9 @@ test("requires an explicit confirmation instead of the input form shortcut", asy
   const replies: unknown[] = []
   await mockServer(page, {
     forms: () => (replies.length ? [] : [form]),
-    onFormReply: (reply) => { replies.push(reply.body) },
+    onFormReply: (reply) => {
+      replies.push(reply.body)
+    },
   })
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
@@ -1084,7 +1086,7 @@ test("restores the draft caret before typing after a request dock closes", async
 
 function mockServer(
   page: Page,
-  requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms" | "seed">,
+  requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "onFormReply" | "forms" | "seed">,
 ) {
   return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }

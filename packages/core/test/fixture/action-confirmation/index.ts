@@ -20,10 +20,7 @@ export default Plugin.define({
   id: "fixture.calibration-publication",
   effect: Effect.fn("CalibrationPublicationFixture")(function* (context) {
     const state = (request: ActionContext) =>
-      context.session.get({ sessionID: request.sessionID }).pipe(
-        Effect.flatMap((session) => readState(session.metadata?.calibration)),
-        Effect.orElseSucceed(() => undefined),
-      )
+      readState(request.sessionMetadata?.calibration).pipe(Effect.orElseSucceed(() => undefined))
     const read = {
       name: "inspect_calibration_report",
       description: "Inspect a reviewed calibration report by its report ID.",

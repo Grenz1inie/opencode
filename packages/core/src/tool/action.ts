@@ -15,6 +15,8 @@ import { normalizedName } from "./runtime.js"
 type Host = Pick<Context, "tool" | "permission" | "event"> & {
   readonly enabled: Effect.Effect<boolean>
   readonly forms: Form.Interface
+  readonly assertNotDenied: Permission.Interface["assertNotDenied"]
+  readonly readSession: Context["session"]["get"]
 }
 
 const Confirmation = Schema.Struct({ title: Schema.NonEmptyString, message: Schema.NonEmptyString })
@@ -79,6 +81,10 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
           allowed ? Effect.void : new Tool.Error({ message: `Action "${definition.name}" is not currently available` }),
         ))
       : Effect.void
+  const currentRequest = (request: Tool.RequestContext) => host.readSession({ sessionID: request.sessionID }).pipe(
+    Effect.map((session) => ({ ...request, sessionMetadata: session.metadata })),
+    Effect.mapError((error) => new Tool.Error({ message: `Cannot load the session for Action "${definition.name}"`, error })),
+  )
 
   return {
     name: definition.name,
@@ -92,8 +98,9 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
     execute: (rawInput: Schema.JsonObject, context: Tool.Context) =>
       Effect.gen(function* () {
         const request = { sessionID: context.sessionID, agent: context.agent }
-        yield* requireAvailable(request)
+        if (available) yield* currentRequest(request).pipe(Effect.flatMap(requireAvailable))
         const values = yield* input.prepare(rawInput, context)
+        if (available && input.collects) yield* currentRequest(request).pipe(Effect.flatMap(requireAvailable))
         if (confirmation) {
           const state = yield* host.forms.ask({
             sessionID: context.sessionID,
@@ -110,10 +117,16 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
           if (state.status !== "answered" || state.answer[ActionConfirmation.field] !== true)
             return yield* Effect.die(new Form.CancelledError({ action: `confirmation for "${definition.name}"` }))
         }
-        if (confirmation || input.collects) yield* requireAvailable(request)
-        yield* host.permission.assert({ action, resources: ["*"], save: ["*"], ...Permission.invocation(context) })
-        const bound = input.bind ? yield* input.bind(request) : undefined
-        yield* requireAvailable(request)
+        if (available && confirmation) yield* currentRequest(request).pipe(Effect.flatMap(requireAvailable))
+        const permission = { action, resources: ["*"], save: ["*"], ...Permission.invocation(context) }
+        yield* host.permission.assert(permission)
+        const current = available || input.bind ? yield* currentRequest(request) : request
+        yield* requireAvailable(current)
+        const bound = input.bind ? yield* input.bind(current) : undefined
+        // A decision made in an open permission prompt cannot override a subsequent deny rule.
+        yield* host.assertNotDenied(permission).pipe(
+          Effect.mapError((error) => new Tool.Error({ message: error.message, error })),
+        )
         const raw = yield* target(bound ? { ...values, ...bound } : values, context)
         const value = yield* Schema.decodeUnknownEffect(output)(raw).pipe(
           Effect.mapError(() => new Tool.Error({ message: `Action "${definition.name}" returned invalid outputs` })),

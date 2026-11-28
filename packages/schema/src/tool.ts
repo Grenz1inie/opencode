@@ -51,7 +51,10 @@ export interface Context {
   readonly automation?: { readonly id: Automation.ID }
 }
 
-export type RequestContext = Pick<Context, "sessionID" | "agent">
+export type RequestContext = Pick<Context, "sessionID" | "agent"> & {
+  /** The session metadata observed for discovery or the current execution check. */
+  readonly sessionMetadata?: Session.Metadata
+}
 
 export interface Namespace {
   readonly name: string
