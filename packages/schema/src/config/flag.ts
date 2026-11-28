@@ -9,6 +9,7 @@ export const wildcard = "all"
  */
 export const registry = {
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
+  action_ui: "Enable experimental Action registration and result views from plugins.",
   flight_action: "Enable the experimental Action UI examples for flights, reviews, and case input.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
@@ -39,7 +40,7 @@ export type Key = keyof typeof registry
 /** Flags the server reports to clients at `GET /api/experimental/flag`, so they can adapt their UI. */
 export const ui: readonly Key[] = ["full_codemode", "flight_action"]
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api", "flight_action"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api", "flight_action", "action_ui"])
 
 /** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */
 export const localOnly: ReadonlySet<Key> = new Set(["opencode_api"])

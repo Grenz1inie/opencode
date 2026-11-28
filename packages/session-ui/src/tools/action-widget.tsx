@@ -86,12 +86,23 @@ const registry: readonly Registration[] = [
   },
 ]
 
+type WidgetResult = {
+  tree?: Widget.Rendered
+  label?: Registration["label"]
+  title?: string
+  diagnostic?: string
+  rejectedOutput?: string
+}
+
 export function renderActionWidget(
   widget: string | undefined,
   outputs: Schema.JsonObject,
   tool?: string,
   emptyFlightLabel = "",
-) {
+  view?: ActionOutput.View,
+): WidgetResult {
+  if (view) return { ...renderTree(() => Widget.render(view.id, view.body, outputs)), title: view.label }
+
   const entry = registry.find((registration) => registration.widget === widget)
   const known = registry.find((registration) => registration.tool === tool && Object.hasOwn(outputs, registration.output))
   const source = known ?? entry
@@ -106,14 +117,18 @@ export function renderActionWidget(
 
   if (!entry) return {}
 
+  const attributes = result.view.attributes
+
+  const render = () => entry.widget === FlightAction.widget
+    ? renderFlightWidget(attributes, emptyFlightLabel)
+    : Widget.render(entry.widget, entry.resource, attributes)
+
+  return { ...renderTree(render), label: entry.label }
+}
+
+function renderTree(render: () => Widget.Rendered) {
   try {
-    const attributes = result.view.attributes
-
-    const tree = entry.widget === FlightAction.widget
-      ? renderFlightWidget(attributes, emptyFlightLabel)
-      : Widget.render(entry.widget, entry.resource, attributes)
-
-    return { tree, label: entry.label }
+    return { tree: render() }
   } catch (error) {
     if (!(error instanceof Widget.BindingError)) throw error
 

@@ -2779,6 +2779,7 @@ export type ConfigEntry =
           codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
+          action_ui?: boolean
           flight_action?: boolean
           media_blob?: boolean
           artifacts?: boolean

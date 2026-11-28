@@ -420,6 +420,7 @@
       "name": "@opencode/flight-action",
       "version": "2.4.1",
       "dependencies": {
+        "@opencode/schema": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {

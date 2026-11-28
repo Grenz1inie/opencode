@@ -12,9 +12,22 @@ export const observe = Effect.fnUntraced(function* (
   event: EventDomain,
   reload: Effect.Effect<void>,
 ) {
-  const loaded = { entries: yield* config.entries() }
-  const refresh = config.entries().pipe(
-    Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
+  const loaded = yield* observeValue(config.entries(), event, reload)
+  return {
+    get entries() {
+      return loaded.value
+    },
+  }
+})
+
+export const observeValue = Effect.fnUntraced(function* <A>(
+  read: Effect.Effect<A>,
+  event: EventDomain,
+  reload: Effect.Effect<void>,
+) {
+  const loaded = { value: yield* read }
+  const refresh = read.pipe(
+    Effect.tap((value) => Effect.sync(() => (loaded.value = value))),
     Effect.andThen(reload),
   )
   yield* event.subscribe({ types: ["config.updated"] }).pipe(
@@ -22,7 +35,7 @@ export const observe = Effect.fnUntraced(function* (
     Effect.forkScoped({ startImmediately: true }),
   )
   // Close the race between the first read and establishing the subscription.
-  loaded.entries = yield* config.entries()
+  loaded.value = yield* read
   return loaded
 })
 

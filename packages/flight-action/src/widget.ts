@@ -1,14 +1,9 @@
 export * as Widget from "./widget.js"
 
+import type { WidgetResource } from "@opencode/schema/widget-resource"
 import { Option, Schema } from "effect"
 
-export type Node = {
-  definition: string
-  id?: string
-  attributes?: Readonly<Record<string, unknown>>
-  children?: readonly Node[]
-  meta?: { forEach?: string; forItem?: string; if?: string }
-}
+export type Node = WidgetResource.Node
 
 export type Rendered = {
   definition: Node["definition"]
