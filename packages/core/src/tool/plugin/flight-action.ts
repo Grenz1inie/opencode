@@ -1,7 +1,7 @@
 export * as FlightActionTool from "./flight-action.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
-import { ActionOutput, CustomerReviews, FlightAction } from "@opencode/flight-action"
+import { ActionOutput, CaseAction, CustomerReviews, FlightAction } from "@opencode/flight-action"
 import { FlightReschedule } from "@opencode/schema/flight-reschedule"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionID } from "@opencode/schema/session-id"
@@ -15,9 +15,11 @@ import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 
-export class CancelledError extends Schema.TaggedError<CancelledError>()("FlightActionTool.CancelledError", {}) {
+export class CancelledError extends Schema.TaggedError<CancelledError>()("FlightActionTool.CancelledError", {
+  action: Schema.optionalKey(Schema.String),
+}) {
   override get message() {
-    return "The user cancelled the flight search"
+    return "The user cancelled the " + (this.action ?? "flight search")
   }
 }
 
@@ -192,6 +194,46 @@ export const Plugin = {
                 Effect.mapError((error) => new ToolFailure({ message: "Permission denied: find_flights", error })),
               )
               return (yield* execute(input, context.id)).tool
+            }),
+        })
+        editor.add({
+          name: CaseAction.action.name,
+          options: { codemode: false },
+          description: "Open the simulated support case form. Prefill known case details and omit unknown values.",
+          input: CaseAction.Draft,
+          execute: (draft, context) =>
+            Effect.gen(function* () {
+              const plan = CaseAction.prepare(draft)
+              if (plan.kind === "unavailable") return yield* Effect.fail(new ToolFailure({ message: plan.message }))
+
+              const state = yield* forms
+                .ask({
+                  sessionID: context.sessionID,
+                  title: CaseAction.action.title,
+                  fields: plan.fields,
+                  metadata: {
+                    kind: "action",
+                    action: CaseAction.action.name,
+                    ...(plan.kind === "registered" ? { editor: plan.editor } : {}),
+                    tool: { messageID: context.messageID, id: context.id },
+                  },
+                })
+                .pipe(Effect.mapError((error) => new ToolFailure({ message: error.message, error })))
+              if (state.status === "cancelled") return yield* Effect.die(new CancelledError({ action: "case submission" }))
+
+              const input = yield* Effect.try({
+                try: () => CaseAction.fromAnswer(state.answer),
+                catch: (error) => new ToolFailure({ message: "Invalid support case details", error }),
+              })
+              yield* permission.assert({
+                action: CaseAction.action.name,
+                resources: ["*"],
+                save: ["*"],
+                ...Permission.invocation(context),
+              }).pipe(Effect.mapError((error) => new ToolFailure({ message: "Permission denied: submit_case", error })))
+
+              yield* Effect.logDebug("Simulated case target invoked", { callID: context.id })
+              return CaseAction.run(input)
             }),
         })
         editor.add({

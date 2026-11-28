@@ -1,0 +1,35 @@
+[
+  {
+    "path": "recipes/LICENSE.md",
+    "repo": "trailheadapps/agent-script-recipes",
+    "commit": "80b2eb37bb81f23143001425a618bc8416efec3d",
+    "source": "LICENSE.md",
+    "git_blob": "68cacd224538796acdd0f31a2b5417bb2302590c",
+    "url": "https://github.com/trailheadapps/agent-script-recipes/blob/80b2eb37bb81f23143001425a618bc8416efec3d/LICENSE.md",
+    "license": "Apache-2.0",
+    "bytes": 24233,
+    "sha256": "66c498a8b30f5d0fd30703644e52a6ae045807a80b72d06e084b8984417e913a"
+  },
+  {
+    "path": "recipes/lightningTypes/caseInput/schema.json",
+    "repo": "trailheadapps/agent-script-recipes",
+    "commit": "80b2eb37bb81f23143001425a618bc8416efec3d",
+    "source": "force-app/main/02_actionConfiguration/customLightningTypes/lightningTypes/caseInput/schema.json",
+    "git_blob": "83ca0be0c5a237adf7026e5da69975332cc71d20",
+    "url": "https://github.com/trailheadapps/agent-script-recipes/blob/80b2eb37bb81f23143001425a618bc8416efec3d/force-app/main/02_actionConfiguration/customLightningTypes/lightningTypes/caseInput/schema.json",
+    "license": "Apache-2.0",
+    "bytes": 156,
+    "sha256": "caa8ad774418ff69d54db7ce0a93f922b23427b4e7276b178b74c3251aa8a440"
+  },
+  {
+    "path": "recipes/lightningTypes/caseInput/lightningDesktopGenAi/editor.json",
+    "repo": "trailheadapps/agent-script-recipes",
+    "commit": "80b2eb37bb81f23143001425a618bc8416efec3d",
+    "source": "force-app/main/02_actionConfiguration/customLightningTypes/lightningTypes/caseInput/lightningDesktopGenAi/editor.json",
+    "git_blob": "1a1ce275e9073f331afac3e1ed89e6c4d342ac87",
+    "url": "https://github.com/trailheadapps/agent-script-recipes/blob/80b2eb37bb81f23143001425a618bc8416efec3d/force-app/main/02_actionConfiguration/customLightningTypes/lightningTypes/caseInput/lightningDesktopGenAi/editor.json",
+    "license": "Apache-2.0",
+    "bytes": 151,
+    "sha256": "91953a7d19ab94151516df12f1fa8e94b519328c2eed51bce61112883344d902"
+  }
+]

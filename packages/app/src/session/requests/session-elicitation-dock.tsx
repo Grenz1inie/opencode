@@ -1,3 +1,4 @@
+import { CaseAction } from "@opencode/flight-action"
 import { createUniqueId, For, Match, Show, Switch as Branch } from "solid-js"
 import { Option, Schema } from "effect"
 import type { FormInfo, FormStringField, LocationRef } from "@opencode/client/promise"
@@ -6,6 +7,7 @@ import { Checkbox } from "@opencode/ui/checkbox"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
+import { Textarea } from "@opencode/ui/textarea"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { LinkedText } from "@opencode/session-ui/linked-text"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -41,6 +43,7 @@ export function SessionElicitationDock(props: {
 
   const message = () => Option.getOrUndefined(decodeMessage(props.request.metadata?.message))
   const action = () => props.request.metadata?.kind === "action"
+  const caseEditor = () => action() && CaseAction.isEditor(props.request.metadata?.editor)
   const errorID = createUniqueId()
 
   return (
@@ -136,6 +139,19 @@ export function SessionElicitationDock(props: {
                           onSelect={(option) => dock.setText(select().key, option?.value ?? "")}
                           placeholder={language.t("session.elicitation.selectPlaceholder")}
                           disabled={dock.busy()}
+                        />
+                      </>
+                    )}
+                  </Match>
+                  <Match when={field.type === "string" && caseEditor() && field.key === CaseAction.description && field}>
+                    {(description) => (
+                      <>
+                        <Label field={description()} />
+                        <Textarea
+                          aria-label={description().title ?? description().key}
+                          value={dock.draft().text[description().key] ?? ""}
+                          disabled={dock.busy()}
+                          onInput={(event) => dock.setText(description().key, event.currentTarget.value)}
                         />
                       </>
                     )}

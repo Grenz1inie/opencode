@@ -268,7 +268,11 @@ export function selectElicitationDraft(state: ElicitationDockState) {
   return state.status === "disposed" ? (state.unsent ?? EMPTY_DRAFT) : state.draft
 }
 
-export function buildElicitationAnswer(fields: readonly ElicitationField[], draft: ElicitationDraft): FormAnswer {
+export function buildElicitationAnswer(
+  fields: readonly ElicitationField[],
+  draft: ElicitationDraft,
+  preserveText = false,
+): FormAnswer {
   return Object.fromEntries(
     elicitationFields(fields).flatMap((field): Array<[string, FormValue]> => {
       if (field.type === "external") return [[field.key, true]]
@@ -281,7 +285,8 @@ export function buildElicitationAnswer(fields: readonly ElicitationField[], draf
         return list.length ? [[field.key, [...list]]] : []
       }
 
-      const text = (field.type === "string" ? draft.text[field.key] : draft.number[field.key])?.trim()
+      const value = field.type === "string" ? draft.text[field.key] : draft.number[field.key]
+      const text = field.type === "string" && preserveText ? value : value?.trim()
 
       if (!text) return []
 
