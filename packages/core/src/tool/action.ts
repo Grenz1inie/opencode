@@ -46,7 +46,7 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
   const target = Object.hasOwn(catalog.targets, definition.target) ? catalog.targets[definition.target] : undefined
   if (typeof target !== "function") return yield* new Tool.Error({ message: `Unknown target "${definition.target}" at target` })
 
-  const input = yield* ActionInput.compile(catalog, definition, host.forms)
+  const input = yield* Effect.fromResult(ActionInput.compile(catalog, definition, host.forms))
   const output = yield* outputFields(catalog, definition.outputs)
   const modelOutput = Schema.Struct(
     Object.fromEntries(Object.entries(output.fields).flatMap(([name, type]) =>
@@ -87,8 +87,8 @@ const compile = Effect.fnUntraced(function* (catalog: Catalog, definition: Defin
 
 const outputFields = Effect.fnUntraced(function* (catalog: Catalog, entries: Definition["outputs"]) {
   const resolved = yield* Effect.forEach(Object.entries(entries), ([name, field]) => {
-    const type = ActionInput.typeFor(catalog, field.type)
-    return type
+    const type = Object.hasOwn(catalog.types, field.type) ? catalog.types[field.type] : undefined
+    return Schema.isSchema(type)
       ? Effect.succeed([name, type] as const)
       : Effect.fail(new Tool.Error({ message: `Unknown type "${field.type}" at outputs.${name}` }))
   })

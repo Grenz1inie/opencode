@@ -9,6 +9,7 @@ import type { Catalog, Definition } from "@opencode/plugin/action"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { bookingEditor, bookingType } from "../fixture/action-input"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -65,7 +66,8 @@ const openForm = <A, E>(invocation: Effect.Effect<A, E>) =>
       return Deferred.succeed(created, form).pipe(Effect.asVoid)
     })
     const fiber = yield* invocation.pipe(Effect.forkChild)
-    const form = yield* Deferred.await(created).pipe(Effect.timeout("3 seconds"), Effect.ensuring(unsubscribe))
+    const finished = Fiber.join(fiber).pipe(Effect.andThen(Effect.die("Action completed without opening a form")))
+    const form = yield* Effect.raceFirst(Deferred.await(created), finished).pipe(Effect.ensuring(unsubscribe))
     return { form, fiber }
   })
 
@@ -81,6 +83,9 @@ it.live("collects only missing or invalid required input and runs the target onc
       inputs: {
         station: { type: "lightning__textType", is_required: true, is_user_input: true },
         visitDate: { type: "lightning__dateType", title: "Visit date", is_required: true, is_user_input: true },
+        duration: { type: "lightning__numberType", is_required: true, is_user_input: true },
+        attempts: { type: "lightning__integerType", is_required: true, is_user_input: true },
+        confirmed: { type: "lightning__booleanType", is_required: true, is_user_input: true },
         comment: { type: "lightning__textType", is_user_input: true },
         tenant: { type: "sampleId", is_required: true },
       },
@@ -107,7 +112,7 @@ it.live("collects only missing or invalid required input and runs the target onc
       properties: { visitDate: { type: "string" } },
       required: ["tenant"],
     })
-    const known = { station: "station 4", tenant: "north" }
+    const known = { station: "station 4", tenant: "north", duration: 1.5, attempts: 2, confirmed: false }
     const { form, fiber: partial } = yield* openForm(invoke(known))
     expect(form.fields).toEqual([expect.objectContaining({ key: "visitDate", title: "Visit date", format: "date" })])
     expect(calls).toEqual([])
@@ -140,8 +145,19 @@ it.live("collects only missing or invalid required input and runs the target onc
     expect(yield* Fiber.join(dismissed)).toMatchObject({ message: expect.stringContaining("cancelled") })
     const forbidden = yield* invoke({ station: known.station }).pipe(Effect.flip)
     expect(forbidden.message).toContain("tenant")
+    const badOptional = yield* invoke({ ...known, comment: 42 }).pipe(Effect.flip)
+    expect(badOptional.message).toEndWith("comment")
     expect(yield* forms.list()).toEqual([])
     expect(calls).toHaveLength(3)
+
+    const { form: numeric, fiber: typed } = yield* openForm(invoke({
+      station: "station 4", tenant: "north", visitDate: "2027-05-14",
+    }))
+    expect(numeric.fields.map(({ type }) => type)).toEqual(["number", "integer", "boolean"])
+    const values = { duration: 2.5, attempts: 3, confirmed: false }
+    yield* forms.reply({ id: numeric.id, answer: values })
+    yield* Fiber.join(typed)
+    expect(calls[3]).toEqual({ ...known, ...values, visitDate: "2027-05-14" })
   }),
 )
 
@@ -151,14 +167,10 @@ it.live("reuses a named Editor for two Actions and validates the complete nested
     const tools = yield* Tool.Service
     const forms = yield* Form.Service
     const calls: Array<{ action: string; input: Schema.JsonObject }> = []
-    const booking = Schema.Struct({
-      facility: Schema.String,
-      slot: Schema.Struct({
-        date: Schema.String,
-        code: Schema.String.check(Schema.isPattern(/^CAL-\d+$/)),
-        duration: Schema.Number,
-      }),
-    }).annotate({ identifier: "CalibrationBooking" })
+    const booking = bookingType.mapFields((fields) => ({
+      ...fields,
+      preferences: Schema.Struct({ ownerID: Schema.String, label: Schema.optionalKey(Schema.String) }),
+    }))
     const names = ["record_calibration", "review_calibration"] as const
     const actions = names.map((name) => ({
       ...definition,
@@ -172,12 +184,10 @@ it.live("reuses a named Editor for two Actions and validates the complete nested
         editors: {
           calibrationBooking: {
             lightningDesktopGenAi: {
-              definition: "fixture/calibration-editor",
-              title: "Calibration details",
+              ...bookingEditor,
               fields: [
-                { path: ["facility"], type: "lightning__textType", title: "Facility", required: true },
-                { path: ["slot", "date"], type: "lightning__dateType", title: "Calibration date", required: true },
-                { path: ["slot", "code"], type: "lightning__textType", title: "Calibration code", required: true },
+                ...bookingEditor.fields,
+                { path: ["preferences", "label"], type: "lightning__textType", title: "Label" },
               ],
             },
             lightningMobile: {
@@ -200,23 +210,26 @@ it.live("reuses a named Editor for two Actions and validates the complete nested
     ])
 
     const snapshot = yield* tools.snapshot()
-    const known = { facility: " North Lab ", slot: { code: "CAL-418", duration: 40 } }
+    const known = { facility: " North Lab ", memo: " ", slot: { code: "CAL-418", duration: 40 }, preferences: { ownerID: "crew-4" } }
     for (const [index, { name }] of actions.entries()) {
       expect(snapshot.definitions.find((tool) => tool.name === name)?.inputSchema).toMatchObject({
         properties: { booking: { properties: { slot: { required: ["duration"] } } } },
       })
       const { form, fiber } = yield* openForm(execute(snapshot, { booking: known }, name))
-      expect(form.title).toBe("Calibration details")
-      expect(form.metadata?.editor).toEqual({ channel: "lightningDesktopGenAi", definition: "fixture/calibration-editor" })
+      expect(form.title).toBe("Calibration booking")
+      expect(form.metadata?.editor).toEqual({ channel: "lightningDesktopGenAi", definition: "fixture/calibration-booking-editor" })
       expect(form.fields).toEqual([
         expect.objectContaining({ key: "booking.facility", default: " North Lab " }),
-        expect.objectContaining({ key: "booking.slot.date", format: "date" }),
+        expect.objectContaining({ key: "booking.memo", default: " " }),
+        expect.objectContaining({ key: "booking.slot.visitDate", format: "date" }),
         expect.objectContaining({ key: "booking.slot.code", default: "CAL-418" }),
+        expect.objectContaining({ key: "booking.preferences.label" }),
       ])
       expect(calls).toHaveLength(index)
       const answer = {
         "booking.facility": index ? "South Lab" : " North Lab ",
-        "booking.slot.date": "2027-06-06",
+        "booking.memo": " ",
+        "booking.slot.visitDate": "2027-06-06",
         "booking.slot.code": "wrong",
       }
       expect((yield* forms.reply({ id: form.id, answer }).pipe(Effect.flip)).message).toEndWith("booking.slot.code")
@@ -228,12 +241,18 @@ it.live("reuses a named Editor for two Actions and validates the complete nested
         action: name,
         input: { booking: {
           facility: answer["booking.facility"],
-          slot: { code: "CAL-501", date: "2027-06-06", duration: 40 },
+          memo: " ",
+          slot: { code: "CAL-501", visitDate: "2027-06-06", duration: 40 },
+          preferences: known.preferences,
         } },
       })
     }
     const unavailable = yield* execute(snapshot, { booking: { facility: "North Lab" } }, names[0]).pipe(Effect.flip)
     expect(unavailable.message).toEndWith("booking.slot.duration")
+    const missingOwner = yield* execute(snapshot, {
+      booking: { facility: "North Lab", slot: { code: "CAL-418", visitDate: "2027-06-06", duration: 40 } },
+    }, names[0]).pipe(Effect.flip)
+    expect(missingOwner.message).toEndWith("booking.preferences.ownerID")
     expect(yield* forms.list()).toEqual([])
     expect(calls).toHaveLength(2)
   }),

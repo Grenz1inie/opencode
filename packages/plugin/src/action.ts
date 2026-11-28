@@ -11,9 +11,16 @@ export interface InputField extends Field {
   readonly is_user_input?: boolean
 }
 
+export type StandardInputType =
+  | "lightning__textType"
+  | "lightning__dateType"
+  | "lightning__numberType"
+  | "lightning__integerType"
+  | "lightning__booleanType"
+
 export interface EditorField {
   readonly path: readonly [string, ...string[]]
-  readonly type: "lightning__textType" | "lightning__dateType"
+  readonly type: StandardInputType
   readonly title: string
   readonly required?: boolean
 }

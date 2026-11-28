@@ -3,15 +3,36 @@ import type { Catalog, Definition, Editor, Target } from "@opencode/plugin/actio
 import { Effect, Schema } from "effect"
 
 const widget = "fixture/calibration-input-receipt"
-const editor = {
+export const bookingEditor = {
   definition: "fixture/calibration-booking-editor",
   title: "Calibration booking",
   fields: [
     { path: ["facility"], type: "lightning__textType", title: "Facility", required: true },
+    { path: ["memo"], type: "lightning__textType", title: "Memo" },
     { path: ["slot", "visitDate"], type: "lightning__dateType", title: "Calibration date", required: true },
     { path: ["slot", "code"], type: "lightning__textType", title: "Calibration code", required: true },
   ],
 } satisfies Editor
+
+const calendarDate = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)).check(
+  Schema.makeFilter(
+    (value) => {
+      const date = new Date(value + "T00:00:00Z")
+      return Number.isFinite(date.getTime()) && date.toISOString().startsWith(value + "T")
+    },
+    { expected: "a calendar date" },
+  ),
+)
+
+export const bookingType = Schema.Struct({
+  facility: Schema.String,
+  memo: Schema.optionalKey(Schema.String),
+  slot: Schema.Struct({
+    visitDate: calendarDate,
+    code: Schema.String.check(Schema.isPattern(/^CAL-\d+$/)),
+    duration: Schema.Number,
+  }),
+}).annotate({ identifier: "CalibrationBooking" })
 
 function action(name: string, description: string, inputs: Definition["inputs"]): Definition {
   return {
@@ -52,9 +73,9 @@ export default Plugin.define({
       actions,
       editors: {
         calibrationBooking: {
-          lightningDesktopGenAi: editor,
+          lightningDesktopGenAi: bookingEditor,
           lightningMobile: {
-            ...editor,
+            ...bookingEditor,
             definition: "fixture/mobile-booking-editor",
             title: "Mobile calibration booking",
           },
@@ -62,14 +83,7 @@ export default Plugin.define({
       },
       types: {
         site: Schema.NonEmptyString,
-        calibrationBooking: Schema.Struct({
-          facility: Schema.String,
-          slot: Schema.Struct({
-            visitDate: Schema.String,
-            code: Schema.String.check(Schema.isPattern(/^CAL-\d+$/)),
-            duration: Schema.Number,
-          }),
-        }).annotate({ identifier: "CalibrationBooking" }),
+        calibrationBooking: bookingType,
         calibrationReceipt: Schema.Struct({ action: Schema.String, input: Schema.JsonObject }),
       },
       targets: Object.fromEntries(actions.map(({ name, target: ref }) => [ref, target(name)])),
