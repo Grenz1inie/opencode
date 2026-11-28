@@ -36,20 +36,25 @@ test("uses a text field for missing cities and respects collection policy defaul
   expect(() => FlightAction.prepare({}, { originCity: { is_required: true } })).toThrow("Origin city")
 })
 
-test("executes the registered target once and binds its actual flight data", () => {
-  const calls: unknown[] = []
-  const result = FlightAction.run(trip, {
-    registry: {
-      "local://flight-search"(input) {
-        calls.push(input)
-        const output = FlightAction.simulate(input)
-        return { ...output, flights: output.flights.map((flight) => ({ ...flight, fare: 612 })) }
-      },
+test.each(["search", "reschedule", "retry"] as const)("looks up the declared target for %s", (attempt) => {
+  const calls: Array<{ input: FlightAction.Input; attempt: FlightAction.Attempt | undefined }> = []
+  const registry = {
+    "local://other": () => {
+      throw new Error("The action did not declare this target")
     },
-  })
-  expect(calls).toEqual([trip])
+    "local://flight-search"(input: FlightAction.Input, attempt?: FlightAction.Attempt) {
+      calls.push({ input, attempt })
+      const results = FlightAction.simulate(input)
+      return { ...results, flights: results.flights.map((flight) => ({ ...flight, fare: 612 })) }
+    },
+  }
+
+  const result = FlightAction.run(trip, { attempt, registry })
+  expect(calls).toEqual([{ input: trip, attempt }])
   expect(result.user?.attributes.flights.map((flight) => flight.fare)).toEqual([612, 612])
-  expect(JSON.parse(result.tool.content)).toMatchObject({ results: { ...trip } })
+  expect(JSON.parse(result.tool.content)).toMatchObject({
+    results: { ...trip, flights: [{ fare: 612 }, { fare: 612 }] },
+  })
 })
 
 test("opens a prefilled date request using the registered node and preserves the route", () => {
